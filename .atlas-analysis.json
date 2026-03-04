@@ -1,0 +1,83 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "GalioPay Integration Example",
+  "projectDescription": "A Next.js integration example demonstrating how to implement GalioPay payment links, process payments, and handle refunds.",
+  "theme": "palm",
+  "primaryColor": "#3cbccc",
+  "lightColor": "#34343c",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Integration Guide",
+            "pages": [
+              "guides/setup",
+              "guides/environment-variables",
+              "guides/creating-payment-links",
+              "guides/handling-payments",
+              "guides/refunds"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/checkout-flow",
+              "examples/interactive-api-tester"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Client",
+            "pages": [
+              "api-reference/client",
+              "api-reference/types"
+            ]
+          },
+          {
+            "group": "Payment Links",
+            "pages": [
+              "api-reference/payment-links/create",
+              "api-reference/payment-links/update",
+              "api-reference/payment-links/get"
+            ]
+          },
+          {
+            "group": "Payments",
+            "pages": [
+              "api-reference/payments/get",
+              "api-reference/payments/refund"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Create and manage payment links with GalioPay API",
+    "Process secure server-side payment requests",
+    "Handle payment refunds (total and partial)",
+    "TypeScript client with full type definitions",
+    "Interactive API testing interface"
+  ],
+  "publicApiSurface": [
+    "createPaymentLink(payload: CreatePaymentLinkInput): Promise<CreatePaymentLinkResponse>",
+    "updatePaymentLink(id: string, payload: UpdatePaymentLinkInput): Promise<unknown>",
+    "getPaymentLink(id: string, proof: string): Promise<PaymentLinkDetails>",
+    "getPayment(id: string): Promise<PaymentDetails>",
+    "refundPayment(id: string, payload: RefundPaymentInput): Promise<RefundPaymentResponse>"
+  ]
+}
