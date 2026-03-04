@@ -1,80 +1,238 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: 'Quickstart'
+description: 'Get started with GalioPay integration in minutes'
 ---
 
-## Get started in three steps
+Get your GalioPay integration up and running in just a few minutes. This guide will walk you through installation, configuration, and creating your first payment link.
 
-Get your documentation site running locally and make your first customization.
+<Steps>
+  <Step title="Install Dependencies">
+    Clone or download the integration example and install the required packages:
 
-### Step 1: Set up your local environment
+    ```bash
+    npm install
+    ```
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    The project uses:
+    - **Next.js 16.1.6** (App Router)
+    - **React 19**
+    - **TypeScript**
+    - **Tailwind CSS 4**
+  </Step>
 
-### Step 2: Deploy your changes
+  <Step title="Configure Environment Variables">
+    Create your environment file from the example:
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```bash
+    cp .env.example .env.local
+    ```
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    Add your GalioPay credentials to `.env.local`:
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```env
+    GALIOPAY_API_BASE=https://pay.galio.app/api
+    GALIOPAY_API_KEY=your_galiopay_api_key
+    GALIOPAY_CLIENT_ID=your_galiopay_client_id
+    APP_URL=http://localhost:3000
+    ```
 
-### Step 3: Go live
+    <Note>
+      **Where to find your credentials:**
+      - `GALIOPAY_API_KEY`: Your secret API key from the GalioPay dashboard
+      - `GALIOPAY_CLIENT_ID`: Your client identifier from the GalioPay dashboard
+      - `APP_URL`: Your application URL (use `http://localhost:3000` for local development)
+    </Note>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    <Warning>
+      Never expose your `GALIOPAY_API_KEY` in client-side code. All GalioPay API calls should be made from server-side routes only.
+    </Warning>
+  </Step>
 
-## Next steps
+  <Step title="Start the Development Server">
+    Run the development server:
 
-Now that you have your docs running, explore these key features:
+    ```bash
+    npm run dev
+    ```
+
+    Your application will be available at:
+    - Main app: `http://localhost:3000`
+    - Interactive examples: `http://localhost:3000/examples`
+  </Step>
+
+  <Step title="Create Your First Payment Link">
+    Now let's create a payment link. This example shows the server-side implementation that keeps your credentials secure.
+
+    ### Set up the API route
+
+    Create a server-side API route at `src/app/api/checkout/payment-link/route.ts`:
+
+    ```typescript src/app/api/checkout/payment-link/route.ts
+    import { NextResponse } from "next/server";
+    import { createPaymentLink } from "@/lib/galiopay/client";
+    import type { CreatePaymentLinkInput } from "@/lib/galiopay/types";
+
+    export async function POST(request: Request) {
+      try {
+        const body = await request.json();
+
+        const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+
+        const payload: CreatePaymentLinkInput = {
+          items: [
+            {
+              title: `Order ${body.orderId}`,
+              quantity: 1,
+              unitPrice: body.amount,
+              currencyId: "ARS",
+            },
+          ],
+          referenceId: body.orderId,
+          description: "Payment from Next.js integration example",
+          backUrl: {
+            success: `${appUrl}/checkout/success?orderId=${body.orderId}`,
+            failure: `${appUrl}/checkout/failure?orderId=${body.orderId}`,
+          },
+        };
+
+        const result = await createPaymentLink(payload);
+
+        return NextResponse.json(result, { status: 201 });
+      } catch (error) {
+        console.error("Error creating payment link:", error);
+
+        const message =
+          error instanceof Error ? error.message : "Unexpected server error";
+        return NextResponse.json({ error: message }, { status: 500 });
+      }
+    }
+    ```
+
+    ### Use the GalioPay client
+
+    The integration includes a pre-built client at `src/lib/galiopay/client.ts` that handles authentication and requests:
+
+    ```typescript src/lib/galiopay/client.ts
+    import type { CreatePaymentLinkInput, CreatePaymentLinkResponse } from "@/lib/galiopay/types";
+
+    function getConfig() {
+      const apiBase = process.env.GALIOPAY_API_BASE;
+      const apiKey = process.env.GALIOPAY_API_KEY;
+      const clientId = process.env.GALIOPAY_CLIENT_ID;
+
+      if (!apiBase || !apiKey || !clientId) {
+        throw new Error("Missing required GalioPay environment variables");
+      }
+
+      return { apiBase, apiKey, clientId };
+    }
+
+    async function requestGalioPay<T>(
+      path: string,
+      init: RequestInit,
+      withAuth = true,
+    ): Promise<T> {
+      const { apiBase, apiKey, clientId } = getConfig();
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+        ...(withAuth
+          ? {
+              Authorization: `Bearer ${apiKey}`,
+              "x-client-id": clientId,
+            }
+          : {}),
+        ...(init.headers ?? {}),
+      };
+
+      const response = await fetch(`${apiBase}${path}`, {
+        ...init,
+        headers,
+        cache: "no-store",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "GalioPay request failed");
+      }
+
+      return data as T;
+    }
+
+    export async function createPaymentLink(
+      payload: CreatePaymentLinkInput,
+    ): Promise<CreatePaymentLinkResponse> {
+      return requestGalioPay<CreatePaymentLinkResponse>("/payment-links", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    }
+    ```
+
+    <Tip>
+      The client automatically adds authentication headers (`Authorization` and `x-client-id`) to all requests that require credentials.
+    </Tip>
+
+    ### Test the integration
+
+    Call your API route from a client component:
+
+    ```typescript
+    const response = await fetch('/api/checkout/payment-link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orderId: 'order-123',
+        amount: 5000 // Amount in cents (ARS 50.00)
+      })
+    });
+
+    const data = await response.json();
+    // data.url contains the payment link
+    window.location.href = data.url;
+    ```
+
+    The response will contain a `url` field with the payment link where users can complete their payment.
+  </Step>
+</Steps>
+
+## What's Next?
+
+Now that you have a working integration, explore these features:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Payment Links" icon="link" href="/api-reference/payment-links/create">
+    Create and manage payment links
+  </Card>
+  <Card title="Payments" icon="credit-card" href="/api-reference/payments/get">
+    Track and manage payment transactions
+  </Card>
+  <Card title="Refunds" icon="rotate-left" href="/api-reference/payments/refund">
+    Process full and partial refunds
+  </Card>
+  <Card title="Examples" icon="code" href="/examples/checkout-flow">
+    Browse complete implementation examples
+  </Card>
+  <Card title="Payments" icon="credit-card" href="/api-reference/payments">
+    Track and manage payment transactions
+  </Card>
+  <Card title="Refunds" icon="rotate-left" href="/api-reference/refunds">
+    Process full and partial refunds
+  </Card>
+  <Card title="Examples" icon="code" href="/examples">
+    Browse complete implementation examples
+  </Card>
 </CardGroup>
 
+## Architecture Overview
+
+The integration follows a secure server-side pattern:
+
+1. **Client-side UI** (`src/app/checkout/page.tsx`) - Collects payment information
+2. **API Route** (`src/app/api/checkout/payment-link/route.ts`) - Handles server-side logic
+3. **GalioPay Client** (`src/lib/galiopay/client.ts`) - Manages authenticated API requests
+4. **GalioPay API** - Processes payments securely
+
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  This architecture ensures your API credentials never reach the browser, maintaining security while providing a smooth user experience.
 </Note>

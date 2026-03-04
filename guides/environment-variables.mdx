@@ -1,0 +1,258 @@
+---
+title: 'Environment Variables'
+description: 'Configure your GalioPay integration with environment variables'
+---
+
+## Required Variables
+
+All GalioPay integrations require three core environment variables:
+
+### GALIOPAY_API_BASE
+
+The base URL for the GalioPay API.
+
+```env
+GALIOPAY_API_BASE=https://pay.galio.app/api
+```
+
+<Note>
+  This should always point to `https://pay.galio.app/api` for production environments.
+</Note>
+
+### GALIOPAY_API_KEY
+
+Your GalioPay API key for authentication.
+
+```env
+GALIOPAY_API_KEY=your_galiopay_api_key
+```
+
+<Warning>
+  This is a sensitive credential. Never commit it to version control or expose it in client-side code.
+</Warning>
+
+**Usage in code:**
+
+The API key is automatically included in requests as a Bearer token:
+
+```typescript src/lib/galiopay/client.ts:42-47
+const headers: HeadersInit = {
+  "Content-Type": "application/json",
+  ...(withAuth
+    ? {
+        Authorization: `Bearer ${apiKey}`,
+        "x-client-id": clientId,
+      }
+    : {}),
+  ...(init.headers ?? {}),
+};
+```
+
+### GALIOPAY_CLIENT_ID
+
+Your GalioPay client identifier.
+
+```env
+GALIOPAY_CLIENT_ID=your_galiopay_client_id
+```
+
+**Usage in code:**
+
+The client ID is sent via the `x-client-id` header in authenticated requests.
+
+## Optional Variables
+
+### APP_URL
+
+The base URL of your application, used for generating callback URLs.
+
+```env
+APP_URL=http://localhost:3000
+```
+
+**Development:**
+```env
+APP_URL=http://localhost:3000
+```
+
+**Production:**
+```env
+APP_URL=https://yourdomain.com
+```
+
+**Usage in code:**
+
+```typescript src/app/api/checkout/payment-link/route.ts:24-40
+const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+
+const payload: CreatePaymentLinkInput = {
+  items: [
+    {
+      title: `Order ${body.orderId}`,
+      quantity: 1,
+      unitPrice: body.amount,
+      currencyId: "ARS",
+    },
+  ],
+  referenceId: body.orderId,
+  description: "Payment from Next.js integration example",
+  backUrl: {
+    success: `${appUrl}/checkout/success?orderId=${body.orderId}`,
+    failure: `${appUrl}/checkout/failure?orderId=${body.orderId}`,
+  },
+};
+```
+
+<Tip>
+  The APP_URL is used to construct success and failure redirect URLs that GalioPay will use after payment completion.
+</Tip>
+
+## Environment File Setup
+
+<Steps>
+  <Step title="Create environment file">
+    For local development, create a `.env.local` file:
+
+    ```bash
+    cp .env.example .env.local
+    ```
+  </Step>
+
+  <Step title="Add your credentials">
+    Edit `.env.local` with your actual values:
+
+    ```env
+    GALIOPAY_API_BASE=https://pay.galio.app/api
+    GALIOPAY_API_KEY=your_actual_api_key_here
+    GALIOPAY_CLIENT_ID=your_actual_client_id_here
+    APP_URL=http://localhost:3000
+    ```
+  </Step>
+
+  <Step title="Add to .gitignore">
+    Ensure your `.gitignore` file excludes environment files:
+
+    ```gitignore
+    .env.local
+    .env*.local
+    ```
+  </Step>
+</Steps>
+
+## Configuration Validation
+
+The GalioPay client validates all required environment variables on initialization:
+
+```typescript src/lib/galiopay/client.ts:11-21
+function getConfig() {
+  const apiBase = process.env.GALIOPAY_API_BASE;
+  const apiKey = process.env.GALIOPAY_API_KEY;
+  const clientId = process.env.GALIOPAY_CLIENT_ID;
+
+  if (!apiBase || !apiKey || !clientId) {
+    throw new Error("Missing required GalioPay environment variables");
+  }
+
+  return { apiBase, apiKey, clientId };
+}
+```
+
+If any required variable is missing, you'll receive an error:
+
+```
+Error: Missing required GalioPay environment variables
+```
+
+## Production Deployment
+
+When deploying to production:
+
+<Steps>
+  <Step title="Set environment variables in your hosting platform">
+    Add the four required variables to your hosting provider's environment configuration:
+    
+    - Vercel: Project Settings → Environment Variables
+    - Netlify: Site Settings → Environment Variables
+    - AWS/Docker: Use secrets management or container environment variables
+  </Step>
+
+  <Step title="Use production values">
+    Ensure you're using production credentials:
+
+    ```env
+    GALIOPAY_API_BASE=https://pay.galio.app/api
+    GALIOPAY_API_KEY=prod_your_production_api_key
+    GALIOPAY_CLIENT_ID=prod_your_production_client_id
+    APP_URL=https://yourdomain.com
+    ```
+  </Step>
+
+  <Step title="Verify configuration">
+    Test your production deployment to ensure all environment variables are properly loaded.
+  </Step>
+</Steps>
+
+<Warning>
+  **Never use development credentials in production.** Always use separate API keys for development and production environments.
+</Warning>
+
+## Environment-Specific Configuration
+
+You can use different environment files for different contexts:
+
+| File | Purpose | Loaded When |
+|------|---------|-------------|
+| `.env.local` | Local development overrides | Always (not in git) |
+| `.env.development` | Development defaults | `npm run dev` |
+| `.env.production` | Production defaults | `npm run build` |
+
+<Note>
+  `.env.local` always takes precedence and should never be committed to version control.
+</Note>
+
+## Troubleshooting
+
+### Missing Environment Variables Error
+
+**Error:**
+```
+Error: Missing required GalioPay environment variables
+```
+
+**Solution:**
+Verify all three required variables are set:
+- `GALIOPAY_API_BASE`
+- `GALIOPAY_API_KEY`
+- `GALIOPAY_CLIENT_ID`
+
+### Environment Variables Not Loading
+
+**Issue:** Changes to `.env.local` not reflecting in your app.
+
+**Solution:** Restart your Next.js development server:
+```bash
+# Stop the server (Ctrl+C)
+npm run dev
+```
+
+### Wrong API Base URL
+
+**Issue:** API requests failing with network errors.
+
+**Solution:** Verify `GALIOPAY_API_BASE` is set to:
+```env
+GALIOPAY_API_BASE=https://pay.galio.app/api
+```
+
+Note the `/api` suffix is required.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Creating Payment Links" icon="link" href="/guides/creating-payment-links">
+    Learn how to create payment links with your configured client
+  </Card>
+  <Card title="Handling Payments" icon="credit-card" href="/guides/handling-payments">
+    Process and track payment transactions
+  </Card>
+</CardGroup>

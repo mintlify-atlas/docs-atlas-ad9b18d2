@@ -1,0 +1,499 @@
+---
+title: 'Creating Payment Links'
+description: 'Generate secure payment links for your customers using GalioPay'
+---
+
+## Overview
+
+Payment links are the primary way to accept payments with GalioPay. They provide a hosted checkout experience where customers can complete their purchase.
+
+## Basic Payment Link Creation
+
+The `createPaymentLink` function generates a payment link from your server:
+
+```typescript src/lib/galiopay/client.ts:68-75
+export async function createPaymentLink(
+  payload: CreatePaymentLinkInput,
+): Promise<CreatePaymentLinkResponse> {
+  return requestGalioPay<CreatePaymentLinkResponse>("/payment-links", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+```
+
+### CreatePaymentLinkInput Type
+
+```typescript src/lib/galiopay/types.ts:9-19
+export type CreatePaymentLinkInput = {
+  items: GalioPayItem[];
+  referenceId: string;
+  description?: string;
+  establishmentName?: string;
+  sellerName?: string;
+  backUrl?: {
+    success?: string;
+    failure?: string;
+  };
+};
+```
+
+### GalioPayItem Type
+
+```typescript src/lib/galiopay/types.ts:1-7
+export type GalioPayItem = {
+  title: string;
+  quantity: number;
+  unitPrice: number;
+  currencyId: "ARS" | string;
+  imageUrl?: string;
+};
+```
+
+### Response Type
+
+```typescript src/lib/galiopay/types.ts:21-23
+export type CreatePaymentLinkResponse = {
+  url: string;
+};
+```
+
+## Creating a Payment Link in an API Route
+
+<Steps>
+  <Step title="Create the API route">
+    Create a file at `src/app/api/checkout/payment-link/route.ts`:
+
+    ```typescript
+    import { NextResponse } from "next/server";
+    import { createPaymentLink } from "@/lib/galiopay/client";
+    import type { CreatePaymentLinkInput } from "@/lib/galiopay/types";
+    ```
+  </Step>
+
+  <Step title="Define request validation">
+    Validate incoming request data:
+
+    ```typescript src/app/api/checkout/payment-link/route.ts:10-22
+    export async function POST(request: Request) {
+      try {
+        const body = (await request.json()) as CheckoutRequest;
+
+        if (!body.orderId || !body.amount || body.amount < 100) {
+          return NextResponse.json(
+            {
+              error:
+                "Invalid request: orderId and amount are required. Minimum amount is 100.",
+            },
+            { status: 400 },
+          );
+        }
+    ```
+
+    <Note>
+      This example enforces a minimum amount of 100 ARS. Adjust based on your business requirements.
+    </Note>
+  </Step>
+
+  <Step title="Construct the payment payload">
+    Build the payment link payload with items and callback URLs:
+
+    ```typescript src/app/api/checkout/payment-link/route.ts:24-41
+    const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+
+    const payload: CreatePaymentLinkInput = {
+      items: [
+        {
+          title: `Order ${body.orderId}`,
+          quantity: 1,
+          unitPrice: body.amount,
+          currencyId: "ARS",
+        },
+      ],
+      referenceId: body.orderId,
+      description: "Payment from Next.js integration example",
+      backUrl: {
+        success: `${appUrl}/checkout/success?orderId=${body.orderId}`,
+        failure: `${appUrl}/checkout/failure?orderId=${body.orderId}`,
+      },
+    };
+    ```
+  </Step>
+
+  <Step title="Create the payment link">
+    Call the GalioPay client and return the response:
+
+    ```typescript src/app/api/checkout/payment-link/route.ts:43-52
+    const result = await createPaymentLink(payload);
+
+    return NextResponse.json(result, { status: 201 });
+  } catch (error) {
+    console.error("Error creating payment link:", error);
+
+    const message =
+      error instanceof Error ? error.message : "Unexpected server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+    ```
+  </Step>
+</Steps>
+
+## Payment Link Parameters
+
+### Required Parameters
+
+<ParamField path="items" type="GalioPayItem[]" required>
+  Array of items being purchased. Each item must include:
+  
+  - `title`: Item name/description
+  - `quantity`: Number of units
+  - `unitPrice`: Price per unit in cents (e.g., 10000 = 100.00 ARS)
+  - `currencyId`: Currency code (e.g., "ARS")
+  - `imageUrl`: (Optional) URL to item image
+</ParamField>
+
+<ParamField path="referenceId" type="string" required>
+  Your internal identifier for this payment (e.g., order ID, invoice number). This helps you track payments in your system.
+</ParamField>
+
+### Optional Parameters
+
+<ParamField path="description" type="string">
+  Additional description shown to the customer during checkout.
+</ParamField>
+
+<ParamField path="establishmentName" type="string">
+  Name of your business or establishment displayed on the payment page.
+</ParamField>
+
+<ParamField path="sellerName" type="string">
+  Name of the seller for this transaction.
+</ParamField>
+
+<ParamField path="backUrl" type="object">
+  Redirect URLs after payment completion:
+  
+  - `success`: URL to redirect after successful payment
+  - `failure`: URL to redirect after failed payment
+  
+  Both URLs can include query parameters to pass order information.
+</ParamField>
+
+## Examples
+
+### Single Item Payment
+
+```typescript
+const payload: CreatePaymentLinkInput = {
+  items: [
+    {
+      title: "Premium Subscription",
+      quantity: 1,
+      unitPrice: 999900, // 9999.00 ARS
+      currencyId: "ARS",
+      imageUrl: "https://example.com/images/premium.png",
+    },
+  ],
+  referenceId: "sub_abc123",
+  description: "Monthly Premium Subscription",
+  establishmentName: "My SaaS Platform",
+  backUrl: {
+    success: `${appUrl}/subscription/success`,
+    failure: `${appUrl}/subscription/failure`,
+  },
+};
+
+const result = await createPaymentLink(payload);
+// result.url: "https://pay.galio.app/link/xyz..."
+```
+
+### Multiple Items Payment
+
+```typescript
+const payload: CreatePaymentLinkInput = {
+  items: [
+    {
+      title: "Blue T-Shirt (Large)",
+      quantity: 2,
+      unitPrice: 2500, // 25.00 ARS each
+      currencyId: "ARS",
+      imageUrl: "https://example.com/images/tshirt-blue.jpg",
+    },
+    {
+      title: "Shipping",
+      quantity: 1,
+      unitPrice: 500, // 5.00 ARS
+      currencyId: "ARS",
+    },
+  ],
+  referenceId: "order_12345",
+  description: "E-commerce order #12345",
+  backUrl: {
+    success: `${appUrl}/orders/12345/success`,
+    failure: `${appUrl}/orders/12345/failure`,
+  },
+};
+
+const result = await createPaymentLink(payload);
+```
+
+### Minimal Payment Link
+
+```typescript
+const payload: CreatePaymentLinkInput = {
+  items: [
+    {
+      title: "Donation",
+      quantity: 1,
+      unitPrice: 10000, // 100.00 ARS
+      currencyId: "ARS",
+    },
+  ],
+  referenceId: `donation_${Date.now()}`,
+};
+
+const result = await createPaymentLink(payload);
+```
+
+## Using the Payment Link
+
+After creating a payment link, redirect your customer to the returned URL:
+
+<CodeGroup>
+
+```typescript Client Component
+"use client";
+
+export default function CheckoutButton({ orderId, amount }: Props) {
+  const handleCheckout = async () => {
+    const response = await fetch("/api/checkout/payment-link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderId, amount }),
+    });
+
+    const data = await response.json();
+    
+    if (data.url) {
+      // Redirect to GalioPay checkout
+      window.location.href = data.url;
+    }
+  };
+
+  return (
+    <button onClick={handleCheckout}>
+      Proceed to Payment
+    </button>
+  );
+}
+```
+
+```typescript Server Action
+"use server";
+
+import { createPaymentLink } from "@/lib/galiopay/client";
+import { redirect } from "next/navigation";
+
+export async function initiateCheckout(orderId: string, amount: number) {
+  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  
+  const result = await createPaymentLink({
+    items: [{
+      title: `Order ${orderId}`,
+      quantity: 1,
+      unitPrice: amount,
+      currencyId: "ARS",
+    }],
+    referenceId: orderId,
+    backUrl: {
+      success: `${appUrl}/checkout/success?orderId=${orderId}`,
+      failure: `${appUrl}/checkout/failure?orderId=${orderId}`,
+    },
+  });
+
+  redirect(result.url);
+}
+```
+
+</CodeGroup>
+
+## Updating Payment Links
+
+You can update an existing payment link before it's used:
+
+```typescript src/lib/galiopay/client.ts:77-85
+export async function updatePaymentLink(
+  id: string,
+  payload: UpdatePaymentLinkInput,
+): Promise<unknown> {
+  return requestGalioPay(`/payment-links/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+```
+
+### UpdatePaymentLinkInput Type
+
+```typescript src/lib/galiopay/types.ts:25-34
+export type UpdatePaymentLinkInput = {
+  referenceId?: string;
+  items?: GalioPayItem[];
+  backUrl?: {
+    success?: string;
+    failure?: string;
+  };
+  description?: string;
+  subClientId?: string | null;
+};
+```
+
+### Example Update
+
+```typescript
+await updatePaymentLink("link_id_xyz", {
+  items: [
+    {
+      title: "Updated Order Total",
+      quantity: 1,
+      unitPrice: 15000, // New amount
+      currencyId: "ARS",
+    },
+  ],
+  description: "Order updated with discount applied",
+});
+```
+
+<Warning>
+  Payment links can only be updated before they are used. Once a customer initiates payment, the link becomes immutable.
+</Warning>
+
+## Retrieving Payment Link Details
+
+Fetch details about a payment link using its ID and proof token:
+
+```typescript src/lib/galiopay/client.ts:87-97
+export async function getPaymentLink(
+  id: string,
+  proof: string,
+): Promise<PaymentLinkDetails> {
+  const query = new URLSearchParams({ proof }).toString();
+  return requestGalioPay<PaymentLinkDetails>(
+    `/payment-links/${id}?${query}`,
+    { method: "GET" },
+    false,
+  );
+}
+```
+
+### PaymentLinkDetails Type
+
+```typescript src/lib/galiopay/types.ts:36-43
+export type PaymentLinkDetails = {
+  id: string;
+  proofToken: string;
+  items: GalioPayItem[];
+  referenceId: string;
+  status: string;
+  paymentId: string | null;
+};
+```
+
+<Note>
+  The `proof` parameter is required for security. It prevents unauthorized access to payment link details. This endpoint does not require authentication headers (note the `false` parameter).
+</Note>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use meaningful reference IDs">
+    Always use unique, trackable reference IDs that correspond to entities in your system:
+    
+    ```typescript
+    // Good
+    referenceId: `order_${orderId}`
+    referenceId: `invoice_${invoiceNumber}`
+    referenceId: `subscription_${userId}_${Date.now()}`
+    
+    // Avoid
+    referenceId: "payment"
+    referenceId: Math.random().toString()
+    ```
+  </Accordion>
+
+  <Accordion title="Always provide callback URLs">
+    Include both success and failure URLs to handle all payment outcomes:
+    
+    ```typescript
+    backUrl: {
+      success: `${appUrl}/checkout/success?orderId=${orderId}`,
+      failure: `${appUrl}/checkout/failure?orderId=${orderId}`,
+    }
+    ```
+    
+    This ensures customers are properly redirected and you can update order status accordingly.
+  </Accordion>
+
+  <Accordion title="Store payment link IDs">
+    Save the payment link ID in your database for tracking and reconciliation:
+    
+    ```typescript
+    const result = await createPaymentLink(payload);
+    
+    // Extract ID from URL if needed
+    const linkId = extractIdFromUrl(result.url);
+    
+    // Store in database
+    await db.orders.update(orderId, {
+      galiopayLinkUrl: result.url,
+      galiopayLinkId: linkId,
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Handle errors gracefully">
+    Always wrap payment link creation in try-catch blocks:
+    
+    ```typescript
+    try {
+      const result = await createPaymentLink(payload);
+      return { success: true, url: result.url };
+    } catch (error) {
+      console.error("Payment link creation failed:", error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : "Unknown error"
+      };
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### "Missing required GalioPay environment variables"
+
+Ensure all three required environment variables are set. See [Environment Variables](/guides/environment-variables) for details.
+
+### Payment link creation returns 401 Unauthorized
+
+Verify your `GALIOPAY_API_KEY` and `GALIOPAY_CLIENT_ID` are correct and valid.
+
+### Customer not redirected after payment
+
+Check that your `backUrl.success` and `backUrl.failure` URLs are:
+- Valid, publicly accessible URLs
+- Using HTTPS in production
+- Correctly handling query parameters
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Handling Payments" icon="credit-card" href="/guides/handling-payments">
+    Track and verify payment status
+  </Card>
+  <Card title="Refunds" icon="rotate-left" href="/guides/refunds">
+    Process refunds for completed payments
+  </Card>
+</CardGroup>

@@ -1,0 +1,240 @@
+---
+title: 'Update Payment Link'
+description: 'Update an existing payment link with new details'
+---
+
+## Function Signature
+
+```typescript
+async function updatePaymentLink(
+  id: string,
+  payload: UpdatePaymentLinkInput
+): Promise<unknown>
+```
+
+Updates an existing payment link with new information. You can modify items, reference ID, redirect URLs, description, and sub-client configuration.
+
+## Parameters
+
+<ParamField path="id" type="string" required>
+  The unique identifier of the payment link to update
+</ParamField>
+
+<ParamField path="payload" type="UpdatePaymentLinkInput" required>
+  The fields to update on the payment link. All fields are optional.
+
+  <ParamField path="referenceId" type="string">
+    Update the reference ID for this payment link
+  </ParamField>
+
+  <ParamField path="items" type="GalioPayItem[]">
+    Replace the items in the payment link
+
+    <ParamField path="title" type="string" required>
+      The item name or title
+    </ParamField>
+
+    <ParamField path="quantity" type="number" required>
+      The quantity of this item
+    </ParamField>
+
+    <ParamField path="unitPrice" type="number" required>
+      The price per unit in the specified currency
+    </ParamField>
+
+    <ParamField path="currencyId" type="string" required>
+      The currency code (e.g., "ARS" for Argentine Peso)
+    </ParamField>
+
+    <ParamField path="imageUrl" type="string">
+      Optional URL to an image representing the item
+    </ParamField>
+  </ParamField>
+
+  <ParamField path="backUrl" type="object">
+    Update redirect URLs after payment completion
+
+    <ParamField path="success" type="string">
+      URL to redirect to after successful payment
+    </ParamField>
+
+    <ParamField path="failure" type="string">
+      URL to redirect to after failed payment
+    </ParamField>
+  </ParamField>
+
+  <ParamField path="description" type="string">
+    Update the description of the payment link
+  </ParamField>
+
+  <ParamField path="subClientId" type="string | null">
+    Update or clear the sub-client identifier. Set to `null` to remove.
+  </ParamField>
+</ParamField>
+
+## Response
+
+Returns the updated payment link data.
+
+## Example Usage
+
+```typescript
+import { updatePaymentLink } from "@/lib/galiopay/client";
+
+// Update items and description
+const response = await updatePaymentLink("pl_abc123", {
+  description: "Updated: Premium subscription + bonus content",
+  items: [
+    {
+      title: "Premium Plan - Monthly",
+      quantity: 1,
+      unitPrice: 2999,
+      currencyId: "ARS"
+    },
+    {
+      title: "Bonus Content Pack",
+      quantity: 1,
+      unitPrice: 499,
+      currencyId: "ARS"
+    }
+  ]
+});
+
+// Update redirect URLs only
+await updatePaymentLink("pl_abc123", {
+  backUrl: {
+    success: "https://myapp.com/payment/complete",
+    failure: "https://myapp.com/payment/retry"
+  }
+});
+
+// Update reference ID
+await updatePaymentLink("pl_abc123", {
+  referenceId: "order-12345-v2"
+});
+
+// Clear sub-client ID
+await updatePaymentLink("pl_abc123", {
+  subClientId: null
+});
+```
+
+## API Route Example
+
+```typescript
+import { NextResponse } from "next/server";
+import { updatePaymentLink } from "@/lib/galiopay/client";
+import type { UpdatePaymentLinkInput } from "@/lib/galiopay/types";
+
+type Params = { params: Promise<{ id: string }> };
+
+export async function PUT(request: Request, { params }: Params) {
+  try {
+    const { id } = await params;
+    const body = (await request.json()) as UpdatePaymentLinkInput;
+
+    const data = await updatePaymentLink(id, body);
+    return NextResponse.json(data, { status: 200 });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unexpected server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+```
+
+## Request Example
+
+```json
+{
+  "description": "Updated: Premium subscription + bonus content",
+  "items": [
+    {
+      "title": "Premium Plan - Monthly",
+      "quantity": 1,
+      "unitPrice": 2999,
+      "currencyId": "ARS"
+    },
+    {
+      "title": "Bonus Content Pack",
+      "quantity": 1,
+      "unitPrice": 499,
+      "currencyId": "ARS"
+    }
+  ],
+  "backUrl": {
+    "success": "https://myapp.com/payment/complete",
+    "failure": "https://myapp.com/payment/retry"
+  }
+}
+```
+
+## Response Example
+
+```json
+{
+  "id": "pl_abc123",
+  "referenceId": "order-12345",
+  "description": "Updated: Premium subscription + bonus content",
+  "status": "active"
+}
+```
+
+## Error Cases
+
+### Invalid Payment Link ID
+
+If the payment link ID doesn't exist:
+
+```json
+{
+  "error": "Payment link not found"
+}
+```
+
+### Authentication Error
+
+If API credentials are missing or invalid:
+
+```json
+{
+  "error": "Missing required GalioPay environment variables"
+}
+```
+
+### API Error
+
+If the GalioPay API returns an error:
+
+```json
+{
+  "error": "GalioPay request failed"
+}
+```
+
+## Security Notes
+
+<Warning>
+  This function requires authentication via the `GALIOPAY_API_KEY` and `GALIOPAY_CLIENT_ID` environment variables. These credentials are automatically included in the request headers:
+  - `Authorization: Bearer {API_KEY}`
+  - `x-client-id: {CLIENT_ID}`
+
+  Never expose these credentials in client-side code. Always call this function from server-side code or secure API routes.
+</Warning>
+
+## Environment Variables
+
+Required environment variables:
+
+- `GALIOPAY_API_BASE` - The base URL for the GalioPay API
+- `GALIOPAY_API_KEY` - Your API key for authentication
+- `GALIOPAY_CLIENT_ID` - Your client ID for authentication
+
+## Implementation Details
+
+The function makes a PUT request to `/payment-links/{id}` with the update payload.
+
+## Related Functions
+
+- [Create Payment Link](/api-reference/payment-links/create) - Create a new payment link
+- [Get Payment Link](/api-reference/payment-links/get) - Retrieve payment link details

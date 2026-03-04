@@ -1,0 +1,494 @@
+---
+title: 'Type Definitions'
+description: 'TypeScript type definitions for GalioPay integration'
+---
+
+## Items
+
+### GalioPayItem
+
+Represents a single item in a payment link.
+
+**TypeScript Definition:**
+```typescript
+type GalioPayItem = {
+  title: string;
+  quantity: number;
+  unitPrice: number;
+  currencyId: "ARS" | string;
+  imageUrl?: string;
+}
+```
+
+**Properties:**
+
+<ResponseField name="title" type="string" required>
+  Name or title of the item
+</ResponseField>
+
+<ResponseField name="quantity" type="number" required>
+  Number of units being purchased
+</ResponseField>
+
+<ResponseField name="unitPrice" type="number" required>
+  Price per unit (in the smallest currency unit, e.g., centavos for ARS)
+</ResponseField>
+
+<ResponseField name="currencyId" type="'ARS' | string" required>
+  Currency identifier. Commonly "ARS" (Argentine Peso) but can be other currency codes
+</ResponseField>
+
+<ResponseField name="imageUrl" type="string">
+  Optional URL to an image representing the item
+</ResponseField>
+
+**Example:**
+
+```typescript
+const item: GalioPayItem = {
+  title: "Premium Subscription",
+  quantity: 1,
+  unitPrice: 2999, // 29.99 ARS
+  currencyId: "ARS",
+  imageUrl: "https://example.com/subscription-icon.png"
+};
+```
+
+---
+
+## Payment Link Types
+
+### CreatePaymentLinkInput
+
+Input type for creating a new payment link.
+
+**TypeScript Definition:**
+```typescript
+type CreatePaymentLinkInput = {
+  items: GalioPayItem[];
+  referenceId: string;
+  description?: string;
+  establishmentName?: string;
+  sellerName?: string;
+  backUrl?: {
+    success?: string;
+    failure?: string;
+  };
+}
+```
+
+**Properties:**
+
+<ResponseField name="items" type="GalioPayItem[]" required>
+  Array of items to include in the payment link. Each item must conform to the GalioPayItem type.
+</ResponseField>
+
+<ResponseField name="referenceId" type="string" required>
+  Unique reference identifier for tracking this payment link in your system
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Optional description of the payment or transaction
+</ResponseField>
+
+<ResponseField name="establishmentName" type="string">
+  Name of the establishment or business receiving the payment
+</ResponseField>
+
+<ResponseField name="sellerName" type="string">
+  Name of the seller or merchant
+</ResponseField>
+
+<ResponseField name="backUrl" type="object">
+  Redirect URLs for payment completion
+  
+  <Expandable title="properties">
+    <ResponseField name="success" type="string">
+      URL to redirect the user to after successful payment
+    </ResponseField>
+    
+    <ResponseField name="failure" type="string">
+      URL to redirect the user to after failed payment
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+**Example:**
+
+```typescript
+const input: CreatePaymentLinkInput = {
+  items: [
+    {
+      title: "T-Shirt",
+      quantity: 2,
+      unitPrice: 1500,
+      currencyId: "ARS"
+    },
+    {
+      title: "Shipping",
+      quantity: 1,
+      unitPrice: 500,
+      currencyId: "ARS"
+    }
+  ],
+  referenceId: "order-2024-001",
+  description: "T-Shirt order with shipping",
+  establishmentName: "My Store",
+  sellerName: "John Doe",
+  backUrl: {
+    success: "https://mystore.com/checkout/success",
+    failure: "https://mystore.com/checkout/failure"
+  }
+};
+```
+
+---
+
+### CreatePaymentLinkResponse
+
+Response type returned when creating a payment link.
+
+**TypeScript Definition:**
+```typescript
+type CreatePaymentLinkResponse = {
+  url: string;
+}
+```
+
+**Properties:**
+
+<ResponseField name="url" type="string" required>
+  The generated payment link URL that can be shared with customers for payment
+</ResponseField>
+
+**Example:**
+
+```typescript
+const response: CreatePaymentLinkResponse = {
+  url: "https://galiopay.com/pay/abc123xyz789"
+};
+```
+
+---
+
+### UpdatePaymentLinkInput
+
+Input type for updating an existing payment link.
+
+**TypeScript Definition:**
+```typescript
+type UpdatePaymentLinkInput = {
+  referenceId?: string;
+  items?: GalioPayItem[];
+  backUrl?: {
+    success?: string;
+    failure?: string;
+  };
+  description?: string;
+  subClientId?: string | null;
+}
+```
+
+**Properties:**
+
+<ResponseField name="referenceId" type="string">
+  Updated reference identifier
+</ResponseField>
+
+<ResponseField name="items" type="GalioPayItem[]">
+  Updated array of items. Replaces the existing items.
+</ResponseField>
+
+<ResponseField name="backUrl" type="object">
+  Updated redirect URLs
+  
+  <Expandable title="properties">
+    <ResponseField name="success" type="string">
+      URL to redirect to on successful payment
+    </ResponseField>
+    
+    <ResponseField name="failure" type="string">
+      URL to redirect to on failed payment
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Updated description of the payment
+</ResponseField>
+
+<ResponseField name="subClientId" type="string | null">
+  Sub-client identifier. Can be explicitly set to null to remove the association.
+</ResponseField>
+
+**Example:**
+
+```typescript
+const updateInput: UpdatePaymentLinkInput = {
+  items: [
+    {
+      title: "T-Shirt (Discounted)",
+      quantity: 2,
+      unitPrice: 1200, // Reduced price
+      currencyId: "ARS"
+    }
+  ],
+  description: "T-Shirt order with 20% discount applied",
+  subClientId: "subclient-456"
+};
+```
+
+---
+
+### PaymentLinkDetails
+
+Detailed information about a payment link.
+
+**TypeScript Definition:**
+```typescript
+type PaymentLinkDetails = {
+  id: string;
+  proofToken: string;
+  items: GalioPayItem[];
+  referenceId: string;
+  status: string;
+  paymentId: string | null;
+}
+```
+
+**Properties:**
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the payment link
+</ResponseField>
+
+<ResponseField name="proofToken" type="string" required>
+  Verification token used to authenticate requests for this payment link
+</ResponseField>
+
+<ResponseField name="items" type="GalioPayItem[]" required>
+  Array of items included in this payment link
+</ResponseField>
+
+<ResponseField name="referenceId" type="string" required>
+  Reference identifier associated with this payment link
+</ResponseField>
+
+<ResponseField name="status" type="string" required>
+  Current status of the payment link (e.g., "pending", "completed", "expired")
+</ResponseField>
+
+<ResponseField name="paymentId" type="string | null" required>
+  ID of the associated payment if one has been made, otherwise null
+</ResponseField>
+
+**Example:**
+
+```typescript
+const details: PaymentLinkDetails = {
+  id: "pl_abc123",
+  proofToken: "proof_xyz789",
+  items: [
+    {
+      title: "Product A",
+      quantity: 1,
+      unitPrice: 5000,
+      currencyId: "ARS"
+    }
+  ],
+  referenceId: "order-2024-001",
+  status: "completed",
+  paymentId: "pay_def456"
+};
+```
+
+---
+
+## Payment Types
+
+### PaymentDetails
+
+Detailed information about a payment transaction.
+
+**TypeScript Definition:**
+```typescript
+type PaymentDetails = {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  date: string;
+  referenceId: string;
+  type: string;
+  moneyReleaseDate?: string;
+  netAmount?: number;
+}
+```
+
+**Properties:**
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the payment
+</ResponseField>
+
+<ResponseField name="amount" type="number" required>
+  Total payment amount in the smallest currency unit (e.g., centavos)
+</ResponseField>
+
+<ResponseField name="currency" type="string" required>
+  Currency code (e.g., "ARS" for Argentine Peso)
+</ResponseField>
+
+<ResponseField name="status" type="string" required>
+  Current payment status (e.g., "approved", "pending", "rejected", "refunded")
+</ResponseField>
+
+<ResponseField name="date" type="string" required>
+  Payment creation date in ISO 8601 format (e.g., "2024-03-15T10:30:00Z")
+</ResponseField>
+
+<ResponseField name="referenceId" type="string" required>
+  Reference identifier linking this payment to your system
+</ResponseField>
+
+<ResponseField name="type" type="string" required>
+  Type of payment transaction
+</ResponseField>
+
+<ResponseField name="moneyReleaseDate" type="string">
+  Date when funds will be released to your account in ISO 8601 format
+</ResponseField>
+
+<ResponseField name="netAmount" type="number">
+  Net amount after deducting fees and commissions
+</ResponseField>
+
+**Example:**
+
+```typescript
+const payment: PaymentDetails = {
+  id: "pay_def456",
+  amount: 5000,
+  currency: "ARS",
+  status: "approved",
+  date: "2024-03-15T10:30:00Z",
+  referenceId: "order-2024-001",
+  type: "card",
+  moneyReleaseDate: "2024-03-22T10:30:00Z",
+  netAmount: 4750 // After 5% fee
+};
+```
+
+---
+
+## Refund Types
+
+### RefundPaymentInput
+
+Input type for requesting a payment refund.
+
+**TypeScript Definition:**
+```typescript
+type RefundPaymentInput = {
+  reason?: string;
+  refundType?: "total" | "partial";
+  refundAmount?: number;
+}
+```
+
+**Properties:**
+
+<ResponseField name="reason" type="string">
+  Optional reason or explanation for the refund
+</ResponseField>
+
+<ResponseField name="refundType" type="'total' | 'partial'">
+  Type of refund to process. Use "total" to refund the entire payment amount, or "partial" to refund a specific amount.
+</ResponseField>
+
+<ResponseField name="refundAmount" type="number">
+  Amount to refund in the smallest currency unit. Required when refundType is "partial". Ignored for total refunds.
+</ResponseField>
+
+**Example (Total Refund):**
+
+```typescript
+const totalRefund: RefundPaymentInput = {
+  reason: "Customer requested cancellation within 24 hours",
+  refundType: "total"
+};
+```
+
+**Example (Partial Refund):**
+
+```typescript
+const partialRefund: RefundPaymentInput = {
+  reason: "One item was out of stock",
+  refundType: "partial",
+  refundAmount: 1500 // Refund 15.00 ARS
+};
+```
+
+---
+
+### RefundPaymentResponse
+
+Response type returned after processing a refund.
+
+**TypeScript Definition:**
+```typescript
+type RefundPaymentResponse = {
+  success: boolean;
+  message: string;
+  payment?: {
+    id: string;
+    status: string;
+  };
+}
+```
+
+**Properties:**
+
+<ResponseField name="success" type="boolean" required>
+  Indicates whether the refund was successfully processed
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Descriptive message about the refund result
+</ResponseField>
+
+<ResponseField name="payment" type="object">
+  Updated payment information after refund (may be undefined if refund failed)
+  
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">
+      Payment identifier
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      New payment status (e.g., "refunded", "partially_refunded")
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+**Example (Success):**
+
+```typescript
+const response: RefundPaymentResponse = {
+  success: true,
+  message: "Refund processed successfully",
+  payment: {
+    id: "pay_def456",
+    status: "refunded"
+  }
+};
+```
+
+**Example (Failure):**
+
+```typescript
+const response: RefundPaymentResponse = {
+  success: false,
+  message: "Payment cannot be refunded after 30 days"
+};
+```

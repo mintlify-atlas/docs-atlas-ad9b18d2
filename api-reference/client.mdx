@@ -1,0 +1,458 @@
+---
+title: 'Client Functions'
+description: 'GalioPay client functions for payment link and payment operations'
+---
+
+## Configuration
+
+### getConfig()
+
+Internal function that retrieves and validates required GalioPay environment variables.
+
+**Environment Variables Required:**
+
+- `GALIOPAY_API_BASE` - Base URL for the GalioPay API
+- `GALIOPAY_API_KEY` - API key for authentication
+- `GALIOPAY_CLIENT_ID` - Client identifier for API requests
+
+**Error Handling:**
+
+Throws an error if any required environment variable is missing:
+```typescript
+throw new Error("Missing required GalioPay environment variables");
+```
+
+---
+
+## Payment Links
+
+### createPaymentLink()
+
+Creates a new payment link for collecting payments from customers.
+
+**Function Signature:**
+```typescript
+function createPaymentLink(
+  payload: CreatePaymentLinkInput
+): Promise<CreatePaymentLinkResponse>
+```
+
+**Parameters:**
+
+<ParamField path="payload" type="CreatePaymentLinkInput" required>
+  Payment link configuration object
+  
+  <Expandable title="properties">
+    <ParamField path="items" type="GalioPayItem[]" required>
+      Array of items to be paid for
+    </ParamField>
+    
+    <ParamField path="referenceId" type="string" required>
+      Unique reference identifier for this payment link
+    </ParamField>
+    
+    <ParamField path="description" type="string">
+      Optional description of the payment
+    </ParamField>
+    
+    <ParamField path="establishmentName" type="string">
+      Name of the establishment receiving payment
+    </ParamField>
+    
+    <ParamField path="sellerName" type="string">
+      Name of the seller
+    </ParamField>
+    
+    <ParamField path="backUrl" type="object">
+      Redirect URLs after payment completion
+      
+      <Expandable title="properties">
+        <ParamField path="success" type="string">
+          URL to redirect to on successful payment
+        </ParamField>
+        
+        <ParamField path="failure" type="string">
+          URL to redirect to on failed payment
+        </ParamField>
+      </Expandable>
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:**
+
+<ResponseField name="url" type="string" required>
+  The generated payment link URL that can be shared with customers
+</ResponseField>
+
+**Example:**
+
+```typescript
+const response = await createPaymentLink({
+  items: [
+    {
+      title: "Premium Subscription",
+      quantity: 1,
+      unitPrice: 2999,
+      currencyId: "ARS",
+      imageUrl: "https://example.com/subscription.png"
+    }
+  ],
+  referenceId: "order-12345",
+  description: "Monthly premium subscription",
+  establishmentName: "My SaaS Company",
+  backUrl: {
+    success: "https://myapp.com/payment/success",
+    failure: "https://myapp.com/payment/failure"
+  }
+});
+
+console.log(response.url); // Payment link URL
+```
+
+**API Endpoint:** `POST /payment-links`
+
+---
+
+### updatePaymentLink()
+
+Updates an existing payment link with new information.
+
+**Function Signature:**
+```typescript
+function updatePaymentLink(
+  id: string,
+  payload: UpdatePaymentLinkInput
+): Promise<unknown>
+```
+
+**Parameters:**
+
+<ParamField path="id" type="string" required>
+  The payment link ID to update
+</ParamField>
+
+<ParamField path="payload" type="UpdatePaymentLinkInput" required>
+  Updated payment link data
+  
+  <Expandable title="properties">
+    <ParamField path="referenceId" type="string">
+      Updated reference identifier
+    </ParamField>
+    
+    <ParamField path="items" type="GalioPayItem[]">
+      Updated array of items
+    </ParamField>
+    
+    <ParamField path="backUrl" type="object">
+      Updated redirect URLs
+      
+      <Expandable title="properties">
+        <ParamField path="success" type="string">
+          URL to redirect to on successful payment
+        </ParamField>
+        
+        <ParamField path="failure" type="string">
+          URL to redirect to on failed payment
+        </ParamField>
+      </Expandable>
+    </ParamField>
+    
+    <ParamField path="description" type="string">
+      Updated description
+    </ParamField>
+    
+    <ParamField path="subClientId" type="string | null">
+      Sub-client identifier (can be set to null)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Example:**
+
+```typescript
+await updatePaymentLink("pl_abc123", {
+  items: [
+    {
+      title: "Premium Subscription - Discounted",
+      quantity: 1,
+      unitPrice: 2499,
+      currencyId: "ARS"
+    }
+  ],
+  description: "Monthly premium subscription (10% off)"
+});
+```
+
+**API Endpoint:** `PUT /payment-links/{id}`
+
+---
+
+### getPaymentLink()
+
+Retrieves details of a specific payment link using its ID and proof token.
+
+**Function Signature:**
+```typescript
+function getPaymentLink(
+  id: string,
+  proof: string
+): Promise<PaymentLinkDetails>
+```
+
+**Parameters:**
+
+<ParamField path="id" type="string" required>
+  The payment link ID
+</ParamField>
+
+<ParamField path="proof" type="string" required>
+  Proof token for verification (passed as query parameter)
+</ParamField>
+
+**Returns:**
+
+<ResponseField name="id" type="string" required>
+  Payment link identifier
+</ResponseField>
+
+<ResponseField name="proofToken" type="string" required>
+  Verification proof token
+</ResponseField>
+
+<ResponseField name="items" type="GalioPayItem[]" required>
+  Array of items in the payment link
+</ResponseField>
+
+<ResponseField name="referenceId" type="string" required>
+  Reference identifier for this payment link
+</ResponseField>
+
+<ResponseField name="status" type="string" required>
+  Current status of the payment link
+</ResponseField>
+
+<ResponseField name="paymentId" type="string | null" required>
+  Associated payment ID (null if not yet paid)
+</ResponseField>
+
+**Example:**
+
+```typescript
+const linkDetails = await getPaymentLink(
+  "pl_abc123",
+  "proof_xyz789"
+);
+
+console.log(linkDetails.status); // "pending" | "completed" | etc.
+console.log(linkDetails.paymentId); // "pay_def456" or null
+```
+
+**API Endpoint:** `GET /payment-links/{id}?proof={proof}`
+
+**Note:** This endpoint does not require authentication (`withAuth = false`)
+
+---
+
+## Payments
+
+### getPayment()
+
+Retrieves details of a specific payment.
+
+**Function Signature:**
+```typescript
+function getPayment(id: string): Promise<PaymentDetails>
+```
+
+**Parameters:**
+
+<ParamField path="id" type="string" required>
+  The payment ID to retrieve
+</ParamField>
+
+**Returns:**
+
+<ResponseField name="id" type="string" required>
+  Payment identifier
+</ResponseField>
+
+<ResponseField name="amount" type="number" required>
+  Payment amount
+</ResponseField>
+
+<ResponseField name="currency" type="string" required>
+  Currency code (e.g., "ARS")
+</ResponseField>
+
+<ResponseField name="status" type="string" required>
+  Current payment status
+</ResponseField>
+
+<ResponseField name="date" type="string" required>
+  Payment creation date (ISO 8601 format)
+</ResponseField>
+
+<ResponseField name="referenceId" type="string" required>
+  Reference identifier associated with this payment
+</ResponseField>
+
+<ResponseField name="type" type="string" required>
+  Payment type
+</ResponseField>
+
+<ResponseField name="moneyReleaseDate" type="string">
+  Date when funds will be released (ISO 8601 format)
+</ResponseField>
+
+<ResponseField name="netAmount" type="number">
+  Net amount after fees
+</ResponseField>
+
+**Example:**
+
+```typescript
+const payment = await getPayment("pay_def456");
+
+console.log(payment.amount); // 2999
+console.log(payment.currency); // "ARS"
+console.log(payment.status); // "approved"
+console.log(payment.netAmount); // 2849 (after fees)
+```
+
+**API Endpoint:** `GET /payments/{id}`
+
+---
+
+### refundPayment()
+
+Processes a refund for an existing payment.
+
+**Function Signature:**
+```typescript
+function refundPayment(
+  id: string,
+  payload: RefundPaymentInput
+): Promise<RefundPaymentResponse>
+```
+
+**Parameters:**
+
+<ParamField path="id" type="string" required>
+  The payment ID to refund
+</ParamField>
+
+<ParamField path="payload" type="RefundPaymentInput" required>
+  Refund configuration
+  
+  <Expandable title="properties">
+    <ParamField path="reason" type="string">
+      Reason for the refund
+    </ParamField>
+    
+    <ParamField path="refundType" type="'total' | 'partial'">
+      Type of refund (defaults to "total" if not specified)
+    </ParamField>
+    
+    <ParamField path="refundAmount" type="number">
+      Amount to refund (required when refundType is "partial")
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:**
+
+<ResponseField name="success" type="boolean" required>
+  Whether the refund was successful
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Descriptive message about the refund result
+</ResponseField>
+
+<ResponseField name="payment" type="object">
+  Updated payment information
+  
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">
+      Payment identifier
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      New payment status after refund
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+**Example (Total Refund):**
+
+```typescript
+const result = await refundPayment("pay_def456", {
+  reason: "Customer requested cancellation",
+  refundType: "total"
+});
+
+console.log(result.success); // true
+console.log(result.message); // "Refund processed successfully"
+console.log(result.payment?.status); // "refunded"
+```
+
+**Example (Partial Refund):**
+
+```typescript
+const result = await refundPayment("pay_def456", {
+  reason: "Partial order cancellation",
+  refundType: "partial",
+  refundAmount: 1000
+});
+
+console.log(result.success); // true
+```
+
+**API Endpoint:** `POST /payments/{id}/refund`
+
+---
+
+## Error Handling
+
+All client functions implement consistent error handling:
+
+**Configuration Errors:**
+```typescript
+// Thrown when environment variables are missing
+throw new Error("Missing required GalioPay environment variables");
+```
+
+**API Errors:**
+```typescript
+// Thrown when API request fails
+// Error message is extracted from response.error if available
+// Otherwise falls back to generic message
+throw new Error(getErrorMessage(data, "GalioPay request failed"));
+```
+
+**Error Handling Pattern:**
+
+```typescript
+try {
+  const response = await createPaymentLink({
+    items: [...],
+    referenceId: "order-123"
+  });
+  // Handle success
+} catch (error) {
+  if (error instanceof Error) {
+    console.error("Payment link creation failed:", error.message);
+  }
+  // Handle error
+}
+```
+
+**Implementation Details:**
+
+The `requestGalioPay()` internal function (`/home/daytona/workspace/source/src/lib/galiopay/client.ts:36-66`):
+- Automatically adds authentication headers (Bearer token + x-client-id)
+- Sets `Content-Type: application/json`
+- Disables caching with `cache: "no-store"`
+- Parses JSON responses
+- Throws descriptive errors on non-OK responses

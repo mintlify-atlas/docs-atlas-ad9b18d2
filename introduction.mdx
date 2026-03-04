@@ -1,0 +1,203 @@
+---
+title: Introduction
+description: Complete Next.js integration example for the GalioPay payment API
+mode: custom
+---
+
+<div className="relative overflow-hidden bg-gradient-to-br from-[#3cbccc] via-[#34343c] to-[#1a1d27] dark:from-[#3cbccc] dark:via-[#34343c] dark:to-[#0f1117] py-20">
+  <div className="max-w-6xl mx-auto px-6 lg:px-8">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+      <div className="lg:col-span-7">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6">
+          GalioPay Integration Example
+        </h1>
+        <p className="text-lg sm:text-xl text-white/90 mb-8 max-w-2xl">
+          A complete Next.js integration example demonstrating how to implement GalioPay payment links, process payments, and handle refunds with TypeScript.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <a
+            href="/quickstart"
+            className="inline-flex items-center px-6 py-3 rounded-lg bg-white text-[#34343c] font-semibold hover:bg-white/90 transition-colors"
+          >
+            Get Started
+          </a>
+          <a
+            href="/api-reference/client"
+            className="inline-flex items-center px-6 py-3 rounded-lg border border-white/30 bg-white/10 text-white font-semibold hover:bg-white/20 transition-colors"
+          >
+            API Reference
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-3">
+    Quick Start
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Get up and running with GalioPay in minutes
+  </p>
+
+  <Steps>
+    <Step title="Clone the repository">
+      Clone the integration example to your local machine:
+      
+      ```bash
+      git clone https://github.com/GalioPay/galiopay-integration-example.git
+      cd galiopay-integration-example
+      ```
+    </Step>
+
+    <Step title="Install dependencies">
+      Install the required packages:
+      
+      ```bash
+      npm install
+      ```
+    </Step>
+
+    <Step title="Configure environment variables">
+      Copy the example environment file and add your GalioPay credentials:
+      
+      ```bash
+      cp .env.example .env.local
+      ```
+      
+      Update `.env.local` with your credentials:
+      
+      ```env
+      GALIOPAY_API_BASE=https://pay.galio.app/api
+      GALIOPAY_API_KEY=your_galiopay_api_key
+      GALIOPAY_CLIENT_ID=your_galiopay_client_id
+      APP_URL=http://localhost:3000
+      ```
+    </Step>
+
+    <Step title="Start the development server">
+      Run the Next.js development server:
+      
+      ```bash
+      npm run dev
+      ```
+      
+      Open [http://localhost:3000](http://localhost:3000) to view the checkout page, or visit [http://localhost:3000/examples](http://localhost:3000/examples) for interactive API examples.
+    </Step>
+  </Steps>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-3">
+    Explore the integration
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Discover what you can build with GalioPay
+  </p>
+
+  <CardGroup cols={3}>
+    <Card title="Setup Guide" icon="wrench" href="/guides/setup">
+      Learn how to configure the integration example for your project
+    </Card>
+    <Card title="Payment Links" icon="link" href="/guides/creating-payment-links">
+      Create and manage payment links for your customers
+    </Card>
+    <Card title="Handle Payments" icon="credit-card" href="/guides/handling-payments">
+      Process payments and retrieve payment details
+    </Card>
+    <Card title="Refunds" icon="rotate-left" href="/guides/refunds">
+      Issue full or partial refunds to customers
+    </Card>
+    <Card title="API Client" icon="code" href="/api-reference/client">
+      Explore the GalioPay TypeScript client functions
+    </Card>
+    <Card title="Type Definitions" icon="brackets-curly" href="/api-reference/types">
+      Review TypeScript types for requests and responses
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-3">
+    Key Features
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Everything you need to integrate GalioPay payments
+  </p>
+
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="p-6 rounded-2xl border border-gray-200 dark:border-[#27272a] bg-gray-50 dark:bg-[#1a1d27]">
+      <div className="text-[#3cbccc] mb-3">
+        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+        </svg>
+      </div>
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+        Secure Server-Side Processing
+      </h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        All API credentials and sensitive operations are handled server-side with Next.js API routes to keep your keys secure.
+      </p>
+    </div>
+
+    <div className="p-6 rounded-2xl border border-gray-200 dark:border-[#27272a] bg-gray-50 dark:bg-[#1a1d27]">
+      <div className="text-[#3cbccc] mb-3">
+        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+        </svg>
+      </div>
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+        TypeScript Support
+      </h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        Full TypeScript definitions for all API requests and responses, providing autocomplete and type safety.
+      </p>
+    </div>
+
+    <div className="p-6 rounded-2xl border border-gray-200 dark:border-[#27272a] bg-gray-50 dark:bg-[#1a1d27]">
+      <div className="text-[#3cbccc] mb-3">
+        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+        </svg>
+      </div>
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+        Interactive Examples
+      </h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        Test all GalioPay API endpoints directly in the browser with the built-in interactive testing interface.
+      </p>
+    </div>
+
+    <div className="p-6 rounded-2xl border border-gray-200 dark:border-[#27272a] bg-gray-50 dark:bg-[#1a1d27]">
+      <div className="text-[#3cbccc] mb-3">
+        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+        Complete Payment Lifecycle
+      </h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        Handle the entire payment flow from link creation through payment processing to refunds.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="rounded-2xl border border-gray-200 dark:border-[#27272a] bg-gradient-to-br from-gray-50 to-white dark:from-[#1a1d27] dark:to-[#242838] p-8 sm:p-12 text-center">
+    <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+      Ready to integrate GalioPay?
+    </h2>
+    <p className="text-base text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
+      Follow our quickstart guide to set up the integration example and start processing payments in minutes.
+    </p>
+    <a
+      href="/quickstart"
+      className="inline-flex items-center px-6 py-3 rounded-lg bg-[#3cbccc] text-white font-semibold hover:bg-[#34a0ae] transition-colors"
+    >
+      Get Started Now
+    </a>
+  </div>
+</div>

@@ -1,0 +1,641 @@
+---
+title: 'Refunds'
+description: 'Process full and partial refunds for GalioPay payments'
+---
+
+## Overview
+
+The GalioPay API allows you to refund completed payments, either in full or partially. Refunds are processed asynchronously and may take time to complete depending on the payment method.
+
+## Refund Function
+
+Use the `refundPayment` function to initiate a refund:
+
+```typescript src/lib/galiopay/client.ts:103-111
+export async function refundPayment(
+  id: string,
+  payload: RefundPaymentInput,
+): Promise<RefundPaymentResponse> {
+  return requestGalioPay<RefundPaymentResponse>(`/payments/${id}/refund`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+```
+
+### RefundPaymentInput Type
+
+```typescript src/lib/galiopay/types.ts:57-61
+export type RefundPaymentInput = {
+  reason?: string;
+  refundType?: "total" | "partial";
+  refundAmount?: number;
+};
+```
+
+### RefundPaymentResponse Type
+
+```typescript src/lib/galiopay/types.ts:63-70
+export type RefundPaymentResponse = {
+  success: boolean;
+  message: string;
+  payment?: {
+    id: string;
+    status: string;
+  };
+};
+```
+
+## Processing Refunds
+
+<Steps>
+  <Step title="Retrieve the payment ID">
+    Get the payment ID from your database or payment link:
+
+    ```typescript
+    const order = await db.orders.findUnique({
+      where: { id: orderId },
+    });
+
+    if (!order.paymentId) {
+      throw new Error("No payment found for this order");
+    }
+
+    const paymentId = order.paymentId;
+    ```
+  </Step>
+
+  <Step title="Prepare refund payload">
+    Construct the refund request with appropriate parameters:
+
+    ```typescript
+    import { refundPayment } from "@/lib/galiopay/client";
+    import type { RefundPaymentInput } from "@/lib/galiopay/types";
+
+    const refundPayload: RefundPaymentInput = {
+      reason: "Customer requested refund",
+      refundType: "total",
+    };
+    ```
+  </Step>
+
+  <Step title="Execute refund">
+    Call the refund function and handle the response:
+
+    ```typescript
+    const result = await refundPayment(paymentId, refundPayload);
+
+    if (result.success) {
+      console.log("Refund successful:", result.message);
+      console.log("Payment status:", result.payment?.status);
+    } else {
+      console.error("Refund failed:", result.message);
+    }
+    ```
+  </Step>
+
+  <Step title="Update order status">
+    Update your database to reflect the refund:
+
+    ```typescript
+    if (result.success) {
+      await db.orders.update({
+        where: { id: orderId },
+        data: {
+          status: "refunded",
+          refundedAt: new Date(),
+        },
+      });
+    }
+    ```
+  </Step>
+</Steps>
+
+## Refund Parameters
+
+<ParamField path="reason" type="string" optional>
+  Optional description explaining why the refund is being processed. This helps with record-keeping and customer support.
+  
+  Examples:
+  - `"Customer requested cancellation"`
+  - `"Product out of stock"`
+  - `"Duplicate payment"`
+  - `"Service not delivered"`
+</ParamField>
+
+<ParamField path="refundType" type="'total' | 'partial'" optional>
+  Type of refund to process:
+  
+  - `"total"` - Refund the full payment amount (default)
+  - `"partial"` - Refund a specific amount (requires `refundAmount`)
+</ParamField>
+
+<ParamField path="refundAmount" type="number" optional>
+  Amount to refund in cents. Required when `refundType` is `"partial"`.
+  
+  Example: `5000` for 50.00 ARS
+  
+  <Warning>
+    The refund amount cannot exceed the original payment amount.
+  </Warning>
+</ParamField>
+
+## Refund Examples
+
+### Full Refund
+
+Refund the entire payment amount:
+
+```typescript
+import { refundPayment } from "@/lib/galiopay/client";
+
+const result = await refundPayment("payment_abc123", {
+  reason: "Customer cancelled order within 24 hours",
+  refundType: "total",
+});
+
+if (result.success) {
+  console.log("Full refund processed successfully");
+  // result.payment.status will be updated
+}
+```
+
+### Partial Refund
+
+Refund a portion of the payment:
+
+```typescript
+import { getPayment, refundPayment } from "@/lib/galiopay/client";
+
+// Get original payment to verify amount
+const payment = await getPayment("payment_abc123");
+console.log("Original amount:", payment.amount); // e.g., 10000 (100.00 ARS)
+
+// Refund 30.00 ARS
+const result = await refundPayment("payment_abc123", {
+  reason: "One item out of stock",
+  refundType: "partial",
+  refundAmount: 3000, // 30.00 ARS in cents
+});
+
+if (result.success) {
+  console.log("Partial refund of 30.00 ARS processed");
+}
+```
+
+### Minimal Refund
+
+Refund with minimal parameters:
+
+```typescript
+const result = await refundPayment("payment_abc123", {
+  refundType: "total",
+});
+```
+
+<Note>
+  If you don't specify `refundType`, the API may default to a full refund, but it's best practice to be explicit.
+</Note>
+
+## Complete API Route Example
+
+Here's a complete refund endpoint:
+
+```typescript
+import { NextResponse } from "next/server";
+import { refundPayment, getPayment } from "@/lib/galiopay/client";
+import type { RefundPaymentInput } from "@/lib/galiopay/types";
+
+type RefundRequest = {
+  orderId: string;
+  reason?: string;
+  refundType?: "total" | "partial";
+  refundAmount?: number;
+};
+
+export async function POST(request: Request) {
+  try {
+    const body = (await request.json()) as RefundRequest;
+
+    if (!body.orderId) {
+      return NextResponse.json(
+        { error: "Order ID is required" },
+        { status: 400 }
+      );
+    }
+
+    // Get order from database
+    const order = await db.orders.findUnique({
+      where: { id: body.orderId },
+    });
+
+    if (!order) {
+      return NextResponse.json(
+        { error: "Order not found" },
+        { status: 404 }
+      );
+    }
+
+    if (!order.paymentId) {
+      return NextResponse.json(
+        { error: "No payment found for this order" },
+        { status: 400 }
+      );
+    }
+
+    // Check if already refunded
+    if (order.status === "refunded") {
+      return NextResponse.json(
+        { error: "Order already refunded" },
+        { status: 400 }
+      );
+    }
+
+    // Verify payment amount for partial refunds
+    if (body.refundType === "partial") {
+      if (!body.refundAmount) {
+        return NextResponse.json(
+          { error: "Refund amount required for partial refunds" },
+          { status: 400 }
+        );
+      }
+
+      const payment = await getPayment(order.paymentId);
+      
+      if (body.refundAmount > payment.amount) {
+        return NextResponse.json(
+          { error: "Refund amount cannot exceed payment amount" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Process refund
+    const refundPayload: RefundPaymentInput = {
+      reason: body.reason || "Refund requested",
+      refundType: body.refundType || "total",
+      ...(body.refundAmount && { refundAmount: body.refundAmount }),
+    };
+
+    const result = await refundPayment(order.paymentId, refundPayload);
+
+    if (!result.success) {
+      return NextResponse.json(
+        { error: result.message },
+        { status: 400 }
+      );
+    }
+
+    // Update order status
+    await db.orders.update({
+      where: { id: body.orderId },
+      data: {
+        status: body.refundType === "partial" ? "partially_refunded" : "refunded",
+        refundedAt: new Date(),
+        refundAmount: body.refundAmount || order.totalAmount,
+        refundReason: body.reason,
+      },
+    });
+
+    // Log refund event
+    await db.refundEvents.create({
+      data: {
+        orderId: order.id,
+        paymentId: order.paymentId,
+        refundType: body.refundType || "total",
+        amount: body.refundAmount || order.totalAmount,
+        reason: body.reason,
+        processedAt: new Date(),
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: result.message,
+      payment: result.payment,
+    });
+  } catch (error) {
+    console.error("Error processing refund:", error);
+
+    const message =
+      error instanceof Error ? error.message : "Unexpected server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+```
+
+## Refund Response Handling
+
+<CodeGroup>
+
+```typescript Successful Refund
+const result = await refundPayment(paymentId, {
+  reason: "Customer request",
+  refundType: "total",
+});
+
+if (result.success) {
+  console.log("Success:", result.message);
+  
+  if (result.payment) {
+    console.log("Payment ID:", result.payment.id);
+    console.log("New status:", result.payment.status);
+  }
+  
+  // Update your records
+  await updateOrderStatus(orderId, "refunded");
+}
+```
+
+```typescript Failed Refund
+const result = await refundPayment(paymentId, {
+  refundType: "total",
+});
+
+if (!result.success) {
+  console.error("Refund failed:", result.message);
+  
+  // Log the failure
+  await logRefundFailure({
+    paymentId,
+    error: result.message,
+    attemptedAt: new Date(),
+  });
+  
+  // Notify admin
+  await notifyAdminOfFailedRefund(paymentId, result.message);
+}
+```
+
+```typescript With Error Handling
+try {
+  const result = await refundPayment(paymentId, {
+    reason: "Defective product",
+    refundType: "total",
+  });
+
+  if (result.success) {
+    return { status: "refunded", message: result.message };
+  } else {
+    return { status: "failed", error: result.message };
+  }
+} catch (error) {
+  console.error("Refund request error:", error);
+  
+  return {
+    status: "error",
+    error: error instanceof Error ? error.message : "Unknown error",
+  };
+}
+```
+
+</CodeGroup>
+
+## Refund Validation
+
+Before processing a refund, validate the request:
+
+```typescript
+async function validateRefundRequest(
+  paymentId: string,
+  refundInput: RefundPaymentInput
+): Promise<{ valid: boolean; error?: string }> {
+  // 1. Get payment details
+  const payment = await getPayment(paymentId);
+
+  // 2. Check if payment is in refundable status
+  if (payment.status === "refunded") {
+    return { valid: false, error: "Payment already refunded" };
+  }
+
+  if (payment.status !== "approved") {
+    return {
+      valid: false,
+      error: `Payment not approved. Current status: ${payment.status}`,
+    };
+  }
+
+  // 3. Validate partial refund amount
+  if (refundInput.refundType === "partial") {
+    if (!refundInput.refundAmount) {
+      return {
+        valid: false,
+        error: "Refund amount required for partial refunds",
+      };
+    }
+
+    if (refundInput.refundAmount <= 0) {
+      return { valid: false, error: "Refund amount must be positive" };
+    }
+
+    if (refundInput.refundAmount > payment.amount) {
+      return {
+        valid: false,
+        error: `Refund amount (${refundInput.refundAmount}) exceeds payment amount (${payment.amount})`,
+      };
+    }
+  }
+
+  return { valid: true };
+}
+
+// Usage
+const validation = await validateRefundRequest(paymentId, refundPayload);
+
+if (!validation.valid) {
+  throw new Error(validation.error);
+}
+
+const result = await refundPayment(paymentId, refundPayload);
+```
+
+## Security Considerations
+
+<Warning>
+  **Refund Security Best Practices:**
+
+  - Require admin authentication before processing refunds
+  - Log all refund attempts with user information
+  - Implement refund approval workflows for large amounts
+  - Verify the payment status before attempting refund
+  - Check for duplicate refund requests
+  - Send confirmation emails for all refunds
+</Warning>
+
+### Refund Authorization Example
+
+```typescript
+import { getServerSession } from "next-auth";
+
+export async function POST(request: Request) {
+  // 1. Verify user is authenticated and authorized
+  const session = await getServerSession();
+  
+  if (!session || !session.user.isAdmin) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
+  // 2. Parse request
+  const body = await request.json();
+
+  // 3. Require approval for large refunds
+  if (body.refundAmount > 100000) { // > 1000.00 ARS
+    const approval = await checkRefundApproval(body.orderId);
+    
+    if (!approval.approved) {
+      return NextResponse.json(
+        { error: "Refund requires manager approval" },
+        { status: 403 }
+      );
+    }
+  }
+
+  // 4. Process refund
+  const result = await refundPayment(body.paymentId, {
+    reason: body.reason,
+    refundType: body.refundType,
+    refundAmount: body.refundAmount,
+  });
+
+  // 5. Log the action
+  await auditLog.create({
+    action: "refund_processed",
+    userId: session.user.id,
+    paymentId: body.paymentId,
+    amount: body.refundAmount,
+    success: result.success,
+  });
+
+  return NextResponse.json(result);
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always provide a reason">
+    Include a descriptive reason for every refund:
+    
+    ```typescript
+    // Good
+    { reason: "Customer received damaged product", refundType: "total" }
+    { reason: "Shipping delay - partial compensation", refundType: "partial", refundAmount: 1000 }
+    
+    // Avoid
+    { refundType: "total" } // No reason provided
+    ```
+  </Accordion>
+
+  <Accordion title="Track refund history">
+    Maintain a separate table for refund events:
+    
+    ```typescript
+    await db.refunds.create({
+      data: {
+        orderId,
+        paymentId,
+        amount: refundAmount,
+        type: refundType,
+        reason,
+        processedBy: userId,
+        processedAt: new Date(),
+        galiopayResponse: result,
+      },
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Notify customers">
+    Send confirmation emails for all refunds:
+    
+    ```typescript
+    if (result.success) {
+      await sendEmail({
+        to: order.customerEmail,
+        subject: "Refund Processed",
+        template: "refund-confirmation",
+        data: {
+          orderId,
+          refundAmount,
+          refundType,
+          reason,
+        },
+      });
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Handle partial refunds carefully">
+    For partial refunds, ensure proper amount calculation:
+    
+    ```typescript
+    const payment = await getPayment(paymentId);
+    const maxRefundAmount = payment.amount - (payment.previousRefunds || 0);
+    
+    if (refundAmount > maxRefundAmount) {
+      throw new Error(
+        `Cannot refund ${refundAmount}. Maximum refundable: ${maxRefundAmount}`
+      );
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Implement idempotency">
+    Prevent duplicate refunds with idempotency checks:
+    
+    ```typescript
+    const existingRefund = await db.refunds.findFirst({
+      where: {
+        paymentId,
+        status: "completed",
+      },
+    });
+    
+    if (existingRefund) {
+      return { success: true, message: "Refund already processed" };
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### Refund Fails with "Payment not found"
+
+Ensure the payment ID is correct and the payment exists:
+
+```typescript
+const payment = await getPayment(paymentId);
+console.log("Payment status:", payment.status);
+```
+
+### Refund Fails for Approved Payment
+
+Some payments may have restrictions on refunds. Check the payment details and contact GalioPay support if needed.
+
+### Partial Refund Amount Validation Error
+
+Verify that:
+- `refundAmount` is greater than 0
+- `refundAmount` does not exceed the original payment amount
+- `refundType` is set to `"partial"`
+
+```typescript
+if (refundType === "partial" && (!refundAmount || refundAmount <= 0)) {
+  throw new Error("Invalid refund amount for partial refund");
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Handling Payments" icon="credit-card" href="/guides/handling-payments">
+    Learn about retrieving and managing payments
+  </Card>
+  <Card title="Creating Payment Links" icon="link" href="/guides/creating-payment-links">
+    Review how to create payment links
+  </Card>
+</CardGroup>

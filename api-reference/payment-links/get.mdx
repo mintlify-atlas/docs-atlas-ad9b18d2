@@ -1,0 +1,218 @@
+---
+title: 'Get Payment Link'
+description: 'Retrieve details of an existing payment link'
+---
+
+## Function Signature
+
+```typescript
+async function getPaymentLink(
+  id: string,
+  proof: string
+): Promise<PaymentLinkDetails>
+```
+
+Retrieves the details of a payment link, including its status, items, and associated payment information. This function requires a proof token for verification.
+
+## Parameters
+
+<ParamField path="id" type="string" required>
+  The unique identifier of the payment link to retrieve
+</ParamField>
+
+<ParamField path="proof" type="string" required>
+  A proof token used to verify access to this payment link. This provides security without requiring full authentication.
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="string" required>
+  The unique identifier of the payment link
+</ResponseField>
+
+<ResponseField name="proofToken" type="string" required>
+  The proof token associated with this payment link
+</ResponseField>
+
+<ResponseField name="items" type="GalioPayItem[]" required>
+  Array of items included in the payment link
+
+  <ResponseField name="title" type="string">
+    The item name or title
+  </ResponseField>
+
+  <ResponseField name="quantity" type="number">
+    The quantity of this item
+  </ResponseField>
+
+  <ResponseField name="unitPrice" type="number">
+    The price per unit in the specified currency
+  </ResponseField>
+
+  <ResponseField name="currencyId" type="string">
+    The currency code (e.g., "ARS")
+  </ResponseField>
+
+  <ResponseField name="imageUrl" type="string">
+    Optional URL to an image representing the item
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="referenceId" type="string" required>
+  Your unique identifier for this payment link
+</ResponseField>
+
+<ResponseField name="status" type="string" required>
+  The current status of the payment link (e.g., "pending", "completed", "expired")
+</ResponseField>
+
+<ResponseField name="paymentId" type="string | null" required>
+  The ID of the associated payment if one has been created, otherwise `null`
+</ResponseField>
+
+## Example Usage
+
+```typescript
+import { getPaymentLink } from "@/lib/galiopay/client";
+
+// Retrieve payment link details
+const paymentLink = await getPaymentLink(
+  "pl_abc123",
+  "proof_xyz789"
+);
+
+console.log("Status:", paymentLink.status);
+console.log("Reference:", paymentLink.referenceId);
+console.log("Items:", paymentLink.items);
+
+if (paymentLink.paymentId) {
+  console.log("Payment ID:", paymentLink.paymentId);
+  // Can now fetch payment details if needed
+}
+```
+
+## API Route Example
+
+```typescript
+import { NextResponse } from "next/server";
+import { getPaymentLink } from "@/lib/galiopay/client";
+
+type Params = { params: Promise<{ id: string }> };
+
+export async function GET(request: Request, { params }: Params) {
+  try {
+    const { id } = await params;
+    const proof = new URL(request.url).searchParams.get("proof");
+
+    if (!proof) {
+      return NextResponse.json(
+        { error: "proof query parameter is required" },
+        { status: 400 },
+      );
+    }
+
+    const data = await getPaymentLink(id, proof);
+    return NextResponse.json(data, { status: 200 });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unexpected server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+```
+
+## Request Example
+
+```bash
+GET /api/examples/payment-links/pl_abc123?proof=proof_xyz789
+```
+
+## Response Example
+
+```json
+{
+  "id": "pl_abc123",
+  "proofToken": "proof_xyz789",
+  "items": [
+    {
+      "title": "Premium Plan - Monthly",
+      "quantity": 1,
+      "unitPrice": 2999,
+      "currencyId": "ARS",
+      "imageUrl": "https://example.com/premium-plan.png"
+    }
+  ],
+  "referenceId": "order-12345",
+  "status": "completed",
+  "paymentId": "pay_def456"
+}
+```
+
+## Error Cases
+
+### Missing Proof Parameter
+
+If the `proof` parameter is not provided:
+
+```json
+{
+  "error": "proof query parameter is required"
+}
+```
+
+### Invalid Payment Link ID or Proof
+
+If the payment link ID doesn't exist or the proof token is invalid:
+
+```json
+{
+  "error": "Payment link not found or invalid proof token"
+}
+```
+
+### API Error
+
+If the GalioPay API returns an error:
+
+```json
+{
+  "error": "GalioPay request failed"
+}
+```
+
+## Security Notes
+
+<Info>
+  Unlike other GalioPay functions, `getPaymentLink` does NOT require API key authentication. Instead, it uses a proof token for verification, making it safe to call from client-side code when you have a valid proof token.
+
+  The function explicitly sets `withAuth = false` when making the request.
+</Info>
+
+<Warning>
+  While this endpoint doesn't require API credentials, you should still validate the proof token. Only share proof tokens with authorized parties who should have access to the payment link details.
+</Warning>
+
+## Environment Variables
+
+Required environment variables:
+
+- `GALIOPAY_API_BASE` - The base URL for the GalioPay API
+
+Note: `GALIOPAY_API_KEY` and `GALIOPAY_CLIENT_ID` are not used for this endpoint.
+
+## Implementation Details
+
+The function makes a GET request to `/payment-links/{id}?proof={proof}` without authentication headers.
+
+## Use Cases
+
+- **Status Checking**: Poll the payment link status to detect when a payment is completed
+- **Order Confirmation**: Display order details to customers after payment
+- **Webhook Validation**: Verify payment link details when receiving webhooks
+- **Customer Support**: Look up payment link information for support inquiries
+
+## Related Functions
+
+- [Create Payment Link](/api-reference/payment-links/create) - Create a new payment link
+- [Update Payment Link](/api-reference/payment-links/update) - Modify an existing payment link
+- [Get Payment](/api-reference/payments/get) - Retrieve payment details using the `paymentId`

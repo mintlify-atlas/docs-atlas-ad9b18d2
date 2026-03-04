@@ -1,0 +1,293 @@
+---
+title: 'Setup'
+description: 'Get started with GalioPay integration in your Next.js application'
+---
+
+## Prerequisites
+
+Before integrating GalioPay, ensure you have:
+
+- A GalioPay account with API credentials
+- Node.js 18+ installed
+- A Next.js application (App Router)
+
+## Installation
+
+<Steps>
+  <Step title="Install dependencies">
+    GalioPay integration doesn't require additional packages beyond Next.js. The implementation uses native `fetch` API.
+
+    ```bash
+    npm install
+    ```
+  </Step>
+
+  <Step title="Create environment file">
+    Copy the example environment file to create your local configuration:
+
+    ```bash
+    cp .env.example .env.local
+    ```
+  </Step>
+
+  <Step title="Add GalioPay credentials">
+    Add your GalioPay API credentials to `.env.local`:
+
+    ```env
+    GALIOPAY_API_BASE=https://pay.galio.app/api
+    GALIOPAY_API_KEY=your_galiopay_api_key
+    GALIOPAY_CLIENT_ID=your_galiopay_client_id
+    APP_URL=http://localhost:3000
+    ```
+
+    <Warning>
+      Never commit your `.env.local` file to version control. These credentials provide access to your GalioPay account.
+    </Warning>
+  </Step>
+
+  <Step title="Create the GalioPay client">
+    Create the type definitions file at `src/lib/galiopay/types.ts`:
+
+    ```typescript
+    export type GalioPayItem = {
+      title: string;
+      quantity: number;
+      unitPrice: number;
+      currencyId: "ARS" | string;
+      imageUrl?: string;
+    };
+
+    export type CreatePaymentLinkInput = {
+      items: GalioPayItem[];
+      referenceId: string;
+      description?: string;
+      establishmentName?: string;
+      sellerName?: string;
+      backUrl?: {
+        success?: string;
+        failure?: string;
+      };
+    };
+
+    export type CreatePaymentLinkResponse = {
+      url: string;
+    };
+
+    export type UpdatePaymentLinkInput = {
+      referenceId?: string;
+      items?: GalioPayItem[];
+      backUrl?: {
+        success?: string;
+        failure?: string;
+      };
+      description?: string;
+      subClientId?: string | null;
+    };
+
+    export type PaymentLinkDetails = {
+      id: string;
+      proofToken: string;
+      items: GalioPayItem[];
+      referenceId: string;
+      status: string;
+      paymentId: string | null;
+    };
+
+    export type PaymentDetails = {
+      id: string;
+      amount: number;
+      currency: string;
+      status: string;
+      date: string;
+      referenceId: string;
+      type: string;
+      moneyReleaseDate?: string;
+      netAmount?: number;
+    };
+
+    export type RefundPaymentInput = {
+      reason?: string;
+      refundType?: "total" | "partial";
+      refundAmount?: number;
+    };
+
+    export type RefundPaymentResponse = {
+      success: boolean;
+      message: string;
+      payment?: {
+        id: string;
+        status: string;
+      };
+    };
+    ```
+  </Step>
+
+  <Step title="Create the API client">
+    Create the client file at `src/lib/galiopay/client.ts`:
+
+    ```typescript
+    import type {
+      CreatePaymentLinkInput,
+      CreatePaymentLinkResponse,
+      PaymentDetails,
+      PaymentLinkDetails,
+      RefundPaymentInput,
+      RefundPaymentResponse,
+      UpdatePaymentLinkInput,
+    } from "@/lib/galiopay/types";
+
+    function getConfig() {
+      const apiBase = process.env.GALIOPAY_API_BASE;
+      const apiKey = process.env.GALIOPAY_API_KEY;
+      const clientId = process.env.GALIOPAY_CLIENT_ID;
+
+      if (!apiBase || !apiKey || !clientId) {
+        throw new Error("Missing required GalioPay environment variables");
+      }
+
+      return { apiBase, apiKey, clientId };
+    }
+
+    function getErrorMessage(data: unknown, fallback: string): string {
+      if (
+        typeof data === "object" &&
+        data !== null &&
+        "error" in data &&
+        typeof (data as { error?: unknown }).error === "string"
+      ) {
+        return (data as { error: string }).error;
+      }
+
+      return fallback;
+    }
+
+    async function requestGalioPay<T>(
+      path: string,
+      init: RequestInit,
+      withAuth = true,
+    ): Promise<T> {
+      const { apiBase, apiKey, clientId } = getConfig();
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+        ...(withAuth
+          ? {
+              Authorization: `Bearer ${apiKey}`,
+              "x-client-id": clientId,
+            }
+          : {}),
+        ...(init.headers ?? {}),
+      };
+
+      const response = await fetch(`${apiBase}${path}`, {
+        ...init,
+        headers,
+        cache: "no-store",
+      });
+
+      const data = (await response.json()) as unknown;
+
+      if (!response.ok) {
+        throw new Error(getErrorMessage(data, "GalioPay request failed"));
+      }
+
+      return data as T;
+    }
+
+    export async function createPaymentLink(
+      payload: CreatePaymentLinkInput,
+    ): Promise<CreatePaymentLinkResponse> {
+      return requestGalioPay<CreatePaymentLinkResponse>("/payment-links", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    }
+
+    export async function updatePaymentLink(
+      id: string,
+      payload: UpdatePaymentLinkInput,
+    ): Promise<unknown> {
+      return requestGalioPay(`/payment-links/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      });
+    }
+
+    export async function getPaymentLink(
+      id: string,
+      proof: string,
+    ): Promise<PaymentLinkDetails> {
+      const query = new URLSearchParams({ proof }).toString();
+      return requestGalioPay<PaymentLinkDetails>(
+        `/payment-links/${id}?${query}`,
+        { method: "GET" },
+        false,
+      );
+    }
+
+    export async function getPayment(id: string): Promise<PaymentDetails> {
+      return requestGalioPay<PaymentDetails>(`/payments/${id}`, { method: "GET" });
+    }
+
+    export async function refundPayment(
+      id: string,
+      payload: RefundPaymentInput,
+    ): Promise<RefundPaymentResponse> {
+      return requestGalioPay<RefundPaymentResponse>(`/payments/${id}/refund`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    }
+    ```
+
+    <Note>
+      The client uses `cache: "no-store"` to ensure payment data is always fresh and not cached by Next.js.
+    </Note>
+  </Step>
+
+  <Step title="Start your development server">
+    ```bash
+    npm run dev
+    ```
+
+    Your application should now be running at `http://localhost:3000`.
+  </Step>
+</Steps>
+
+## Security Best Practices
+
+<Warning>
+  **Critical Security Requirements:**
+  
+  - Do not expose `GALIOPAY_API_KEY` in client components
+  - Keep all GalioPay calls that need credentials on server-side routes
+  - Never send API credentials to the browser
+</Warning>
+
+The GalioPay client is designed to run **server-side only**. All API routes that use the client should:
+
+- Be located in `app/api/*` directories (Next.js API routes)
+- Never be imported into client components
+- Use Next.js Server Components or API routes for any GalioPay operations
+
+## Architecture Overview
+
+The recommended integration architecture consists of:
+
+1. **Client Components** (`src/app/checkout/page.tsx`): UI that initiates checkout
+2. **API Routes** (`src/app/api/checkout/payment-link/route.ts`): Server endpoints that authenticate with GalioPay
+3. **GalioPay Client** (`src/lib/galiopay/client.ts`): Typed client functions used only on the server
+
+<Tip>
+  This separation ensures your API credentials remain secure while providing a seamless user experience.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="key" href="/guides/environment-variables">
+    Learn about all available configuration options
+  </Card>
+  <Card title="Creating Payment Links" icon="link" href="/guides/creating-payment-links">
+    Start accepting payments with payment links
+  </Card>
+</CardGroup>

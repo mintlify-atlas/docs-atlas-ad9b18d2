@@ -1,0 +1,125 @@
+---
+title: "Get Payment"
+api: "GET /payments/{id}"
+description: "Retrieve detailed information about a specific payment"
+---
+
+## Function Signature
+
+```typescript
+async function getPayment(id: string): Promise<PaymentDetails>
+```
+
+## Parameters
+
+<ParamField path="id" type="string" required>
+  The unique identifier of the payment to retrieve
+</ParamField>
+
+## Response
+
+Returns a `PaymentDetails` object containing the following fields:
+
+<ResponseField name="id" type="string" required>
+  The unique identifier of the payment
+</ResponseField>
+
+<ResponseField name="amount" type="number" required>
+  The total payment amount
+</ResponseField>
+
+<ResponseField name="currency" type="string" required>
+  The currency code for the payment (e.g., "ARS")
+</ResponseField>
+
+<ResponseField name="status" type="string" required>
+  The current status of the payment
+</ResponseField>
+
+<ResponseField name="date" type="string" required>
+  The date and time when the payment was created (ISO 8601 format)
+</ResponseField>
+
+<ResponseField name="referenceId" type="string" required>
+  The reference ID associated with this payment, typically linking to your internal order or transaction
+</ResponseField>
+
+<ResponseField name="type" type="string" required>
+  The type of payment transaction
+</ResponseField>
+
+<ResponseField name="moneyReleaseDate" type="string">
+  The date when the payment funds will be released (ISO 8601 format)
+</ResponseField>
+
+<ResponseField name="netAmount" type="number">
+  The net amount after fees and deductions
+</ResponseField>
+
+## Usage Example
+
+```typescript
+import { getPayment } from "@/lib/galiopay/client";
+
+// Get payment details
+const paymentId = "pay_123456789";
+const payment = await getPayment(paymentId);
+
+console.log(payment);
+// {
+//   id: "pay_123456789",
+//   amount: 15000,
+//   currency: "ARS",
+//   status: "approved",
+//   date: "2024-03-15T14:30:00Z",
+//   referenceId: "order_abc123",
+//   type: "credit_card",
+//   moneyReleaseDate: "2024-03-20T14:30:00Z",
+//   netAmount: 14250
+// }
+```
+
+## API Route Example
+
+```typescript
+import { NextResponse } from "next/server";
+import { getPayment } from "@/lib/galiopay/client";
+
+type Params = { params: Promise<{ id: string }> };
+
+export async function GET(_request: Request, { params }: Params) {
+  try {
+    const { id } = await params;
+    const data = await getPayment(id);
+    return NextResponse.json(data, { status: 200 });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unexpected server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+```
+
+## Error Handling
+
+The function throws an error if:
+- The payment ID doesn't exist
+- Authentication credentials are invalid or missing
+- The GalioPay API is unavailable
+
+```typescript
+try {
+  const payment = await getPayment("pay_invalid");
+} catch (error) {
+  console.error("Failed to get payment:", error.message);
+  // Handle error appropriately
+}
+```
+
+## Configuration
+
+This function requires the following environment variables:
+
+- `GALIOPAY_API_BASE` - The base URL for the GalioPay API
+- `GALIOPAY_API_KEY` - Your API key for authentication
+- `GALIOPAY_CLIENT_ID` - Your client ID for authentication

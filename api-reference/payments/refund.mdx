@@ -1,0 +1,198 @@
+---
+title: "Refund Payment"
+api: "POST /payments/{id}/refund"
+description: "Process a full or partial refund for a payment"
+---
+
+## Function Signature
+
+```typescript
+async function refundPayment(
+  id: string,
+  payload: RefundPaymentInput
+): Promise<RefundPaymentResponse>
+```
+
+## Parameters
+
+<ParamField path="id" type="string" required>
+  The unique identifier of the payment to refund
+</ParamField>
+
+<ParamField body="reason" type="string">
+  The reason for the refund. Useful for record-keeping and customer communication.
+</ParamField>
+
+<ParamField body="refundType" type="'total' | 'partial'">
+  The type of refund to process:
+  - `total`: Refund the entire payment amount (default)
+  - `partial`: Refund a specific amount (requires `refundAmount`)
+</ParamField>
+
+<ParamField body="refundAmount" type="number">
+  The amount to refund when `refundType` is set to `partial`. Required for partial refunds.
+</ParamField>
+
+## Request Body Type
+
+```typescript
+type RefundPaymentInput = {
+  reason?: string;
+  refundType?: "total" | "partial";
+  refundAmount?: number;
+}
+```
+
+## Response
+
+Returns a `RefundPaymentResponse` object:
+
+<ResponseField name="success" type="boolean" required>
+  Indicates whether the refund was successful
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  A message describing the refund result
+</ResponseField>
+
+<ResponseField name="payment" type="object">
+  Updated payment information (if available)
+  
+  <ResponseField name="payment.id" type="string">
+    The payment ID that was refunded
+  </ResponseField>
+  
+  <ResponseField name="payment.status" type="string">
+    The updated status of the payment after refund
+  </ResponseField>
+</ResponseField>
+
+## Usage Examples
+
+### Total Refund
+
+```typescript
+import { refundPayment } from "@/lib/galiopay/client";
+
+// Refund entire payment
+const result = await refundPayment("pay_123456789", {
+  reason: "Customer requested cancellation",
+  refundType: "total"
+});
+
+console.log(result);
+// {
+//   success: true,
+//   message: "Payment refunded successfully",
+//   payment: {
+//     id: "pay_123456789",
+//     status: "refunded"
+//   }
+// }
+```
+
+### Partial Refund
+
+```typescript
+import { refundPayment } from "@/lib/galiopay/client";
+
+// Refund part of the payment
+const result = await refundPayment("pay_123456789", {
+  reason: "One item was out of stock",
+  refundType: "partial",
+  refundAmount: 5000
+});
+
+console.log(result);
+// {
+//   success: true,
+//   message: "Partial refund processed successfully",
+//   payment: {
+//     id: "pay_123456789",
+//     status: "partially_refunded"
+//   }
+// }
+```
+
+## API Route Example
+
+```typescript
+import { NextResponse } from "next/server";
+import { refundPayment } from "@/lib/galiopay/client";
+import type { RefundPaymentInput } from "@/lib/galiopay/types";
+
+type Params = { params: Promise<{ id: string }> };
+
+export async function POST(request: Request, { params }: Params) {
+  try {
+    const { id } = await params;
+    const body = (await request.json()) as RefundPaymentInput;
+
+    if (body.refundType === "partial" && !body.refundAmount) {
+      return NextResponse.json(
+        { error: "refundAmount is required for partial refunds" },
+        { status: 400 },
+      );
+    }
+
+    const data = await refundPayment(id, body);
+    return NextResponse.json(data, { status: 200 });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unexpected server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+```
+
+## Validation
+
+### Partial Refund Validation
+
+When processing a partial refund, you must provide the `refundAmount`:
+
+```typescript
+const body: RefundPaymentInput = {
+  refundType: "partial",
+  refundAmount: 3000 // Required for partial refunds
+};
+
+if (body.refundType === "partial" && !body.refundAmount) {
+  throw new Error("refundAmount is required for partial refunds");
+}
+```
+
+## Error Handling
+
+The function throws an error if:
+- The payment ID doesn't exist
+- The payment has already been refunded
+- The refund amount exceeds the payment amount (for partial refunds)
+- The `refundAmount` is missing for partial refunds
+- Authentication credentials are invalid or missing
+- The GalioPay API is unavailable
+
+```typescript
+try {
+  const result = await refundPayment("pay_123456789", {
+    refundType: "partial",
+    refundAmount: 5000,
+    reason: "Item was damaged"
+  });
+  
+  if (!result.success) {
+    console.error("Refund failed:", result.message);
+  }
+} catch (error) {
+  console.error("Failed to process refund:", error.message);
+  // Handle error appropriately
+}
+```
+
+## Configuration
+
+This function requires the following environment variables:
+
+- `GALIOPAY_API_BASE` - The base URL for the GalioPay API
+- `GALIOPAY_API_KEY` - Your API key for authentication
+- `GALIOPAY_CLIENT_ID` - Your client ID for authentication

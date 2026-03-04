@@ -1,0 +1,488 @@
+---
+title: 'Checkout Flow'
+description: 'Complete implementation guide for the GalioPay checkout flow with success and failure callbacks'
+---
+
+## Overview
+
+This guide demonstrates a complete checkout flow implementation using GalioPay payment links. The example shows how to:
+
+- Create a payment link from your backend
+- Redirect users to GalioPay for payment
+- Handle success and failure callbacks
+- Fetch payment details and process refunds
+
+## Flow Architecture
+
+<Steps>
+  <Step title="User initiates checkout">
+    The customer clicks "Create payment link" on your checkout page
+  </Step>
+  <Step title="Backend creates payment link">
+    Your API route calls GalioPay to create a payment link with success/failure URLs
+  </Step>
+  <Step title="Redirect to GalioPay">
+    Customer is redirected to GalioPay's hosted payment page
+  </Step>
+  <Step title="Payment processing">
+    Customer completes payment on GalioPay
+  </Step>
+  <Step title="Callback redirect">
+    GalioPay redirects to your success or failure URL with `galio_payment_id` parameter
+  </Step>
+  <Step title="Fetch payment details">
+    Your success page fetches the payment details using the payment ID
+  </Step>
+</Steps>
+
+## Implementation
+
+### 1. Checkout Page (Frontend)
+
+The checkout page collects order information and initiates the payment flow.
+
+**Source:** `src/app/checkout/page.tsx`
+
+```tsx
+"use client";
+
+import { useState } from "react";
+
+export default function CheckoutPage() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handlePay(): Promise<void> {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/checkout/payment-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: `order-${Date.now()}`,
+          amount: 100,
+        }),
+      });
+
+      const data = (await response.json()) as { url?: string; error?: string };
+
+      if (!response.ok || !data.url) {
+        throw new Error(data.error ?? "Could not initialize checkout");
+      }
+
+      window.location.href = data.url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unexpected error");
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main className="mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-12">
+      <section className="w-full rounded-3xl border border-line bg-card p-8 shadow-[0_18px_45px_rgba(16,42,67,0.1)]">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted">
+              Checkout Demo
+            </p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
+              Pay with GalioPay
+            </h1>
+          </div>
+          <span className="rounded-full bg-emerald-100 px-3 py-1 font-mono text-xs text-emerald-700">
+            ARS
+          </span>
+        </div>
+
+        <div className="mt-7 rounded-2xl border border-line bg-slate-50 p-5">
+          <p className="text-sm text-muted">Item</p>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <p className="text-base font-medium text-foreground">Testing</p>
+            <p className="font-mono text-sm text-foreground">$100</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handlePay}
+          disabled={loading}
+          className="mt-8 inline-flex w-full items-center justify-center rounded-xl bg-brand px-4 py-3 text-sm font-medium text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-65"
+        >
+          {loading ? "Redirecting to GalioPay..." : "Create payment link"}
+        </button>
+
+        {error ? <p className="mt-4 text-sm text-rose-600">{error}</p> : null}
+      </section>
+    </main>
+  );
+}
+```
+
+<Note>
+  The `orderId` is generated using a timestamp. In production, use your own unique order identifier.
+</Note>
+
+### 2. Payment Link API Route (Backend)
+
+This route creates a payment link with GalioPay and returns the checkout URL.
+
+**Source:** `src/app/api/checkout/payment-link/route.ts`
+
+```typescript
+import { NextResponse } from "next/server";
+import { createPaymentLink } from "@/lib/galiopay/client";
+import type { CreatePaymentLinkInput } from "@/lib/galiopay/types";
+
+type CheckoutRequest = {
+  orderId?: string;
+  amount?: number;
+};
+
+export async function POST(request: Request) {
+  try {
+    const body = (await request.json()) as CheckoutRequest;
+
+    if (!body.orderId || !body.amount || body.amount < 100) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid request: orderId and amount are required. Minimum amount is 100.",
+        },
+        { status: 400 },
+      );
+    }
+
+    const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+
+    const payload: CreatePaymentLinkInput = {
+      items: [
+        {
+          title: `Order ${body.orderId}`,
+          quantity: 1,
+          unitPrice: body.amount,
+          currencyId: "ARS",
+        },
+      ],
+      referenceId: body.orderId,
+      description: "Payment from Next.js integration example",
+      backUrl: {
+        success: `${appUrl}/checkout/success?orderId=${body.orderId}`,
+        failure: `${appUrl}/checkout/failure?orderId=${body.orderId}`,
+      },
+    };
+
+    const result = await createPaymentLink(payload);
+
+    return NextResponse.json(result, { status: 201 });
+  } catch (error) {
+    console.error("Error creating payment link:", error);
+
+    const message =
+      error instanceof Error ? error.message : "Unexpected server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+```
+
+<Warning>
+  **Security Best Practice:** Always create payment links from your backend, never from the client. This prevents tampering with prices or order details.
+</Warning>
+
+### 3. Success Callback Page
+
+After a successful payment, GalioPay redirects to this page with the `galio_payment_id` query parameter.
+
+**Source:** `src/app/checkout/success/page.tsx`
+
+```tsx
+"use client";
+
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+
+type PaymentResponse = {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  date: string;
+  referenceId: string;
+  type: string;
+  moneyReleaseDate?: string;
+  netAmount?: number;
+};
+
+function SuccessContent() {
+  const searchParams = useSearchParams();
+  const paymentId = searchParams.get("galio_payment_id");
+
+  const [payment, setPayment] = useState<PaymentResponse | null>(null);
+  const [loadingPayment, setLoadingPayment] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadPayment(): Promise<void> {
+      if (!paymentId) {
+        return;
+      }
+
+      setLoadingPayment(true);
+      setError(null);
+
+      try {
+        const response = await fetch(
+          `/api/examples/payments/${encodeURIComponent(paymentId)}`,
+          {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+
+        const data = (await response.json()) as unknown;
+
+        if (!response.ok) {
+          throw new Error(
+            typeof data === "object" &&
+              data !== null &&
+              "error" in data &&
+              typeof (data as { error?: unknown }).error === "string"
+              ? (data as { error: string }).error
+              : "Could not load payment",
+          );
+        }
+
+        setPayment(data as PaymentResponse);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unexpected error");
+      } finally {
+        setLoadingPayment(false);
+      }
+    }
+
+    void loadPayment();
+  }, [paymentId]);
+
+  return (
+    <main className="mx-auto flex min-h-screen w-full max-w-4xl items-center px-6 py-12">
+      <section className="w-full rounded-3xl border border-emerald-200 bg-emerald-50 p-8">
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-emerald-700">
+          Payment result
+        </p>
+        <h1 className="mt-2 text-3xl font-semibold text-emerald-900">
+          Payment approved
+        </h1>
+        <p className="mt-3 text-sm text-emerald-800">
+          Read `galio_payment_id` from the success URL, fetch payment details,
+          and test refunds.
+        </p>
+
+        <div className="mt-6 rounded-2xl border border-emerald-200 bg-white p-4">
+          <p className="font-mono text-xs text-emerald-700">galio_payment_id</p>
+          <p className="mt-1 text-sm text-emerald-900">
+            {paymentId ?? "Not found in URL"}
+          </p>
+        </div>
+
+        {loadingPayment ? (
+          <p className="mt-4 text-sm text-emerald-800">Loading payment...</p>
+        ) : null}
+
+        {payment ? (
+          <div className="mt-4 rounded-2xl border border-emerald-200 bg-white p-4">
+            <p className="text-sm font-medium text-emerald-900">
+              Payment details
+            </p>
+            <pre className="mt-2 overflow-x-auto rounded-xl bg-slate-900 p-3 font-mono text-xs text-slate-100">
+              {JSON.stringify(payment, null, 2)}
+            </pre>
+          </div>
+        ) : null}
+
+        {error ? <p className="mt-4 text-sm text-rose-600">{error}</p> : null}
+      </section>
+    </main>
+  );
+}
+
+export default function SuccessPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="mx-auto flex min-h-screen w-full max-w-4xl items-center px-6 py-12">
+          <section className="w-full rounded-3xl border border-emerald-200 bg-emerald-50 p-8">
+            <p className="text-sm text-emerald-900">Loading success page...</p>
+          </section>
+        </main>
+      }
+    >
+      <SuccessContent />
+    </Suspense>
+  );
+}
+```
+
+<Info>
+  **Important:** Always wrap components that use `useSearchParams()` in a `Suspense` boundary to prevent Next.js hydration errors.
+</Info>
+
+### 4. Failure Callback Page
+
+When a payment is cancelled or fails, GalioPay redirects to this page.
+
+**Source:** `src/app/checkout/failure/page.tsx`
+
+```tsx
+export default function FailurePage() {
+  return (
+    <main className="mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-12">
+      <section className="w-full rounded-3xl border border-amber-200 bg-amber-50 p-8">
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-amber-700">
+          Payment result
+        </p>
+        <h1 className="mt-2 text-3xl font-semibold text-amber-900">
+          Payment not completed
+        </h1>
+        <p className="mt-3 text-sm text-amber-800">
+          The customer returned from GalioPay without a completed payment.
+        </p>
+      </section>
+    </main>
+  );
+}
+```
+
+## Refund Functionality
+
+The success page also includes refund functionality. Here's the implementation:
+
+```tsx
+const [refundLoading, setRefundLoading] = useState(false);
+const [refundAmount, setRefundAmount] = useState("");
+const [refundResult, setRefundResult] = useState<unknown>(null);
+
+async function runRefund(type: "total" | "partial"): Promise<void> {
+  if (!paymentId) {
+    setError("Missing galio_payment_id in URL");
+    return;
+  }
+
+  setRefundLoading(true);
+  setError(null);
+  setRefundResult(null);
+
+  try {
+    const payload =
+      type === "partial"
+        ? {
+            reason: "Partial refund from success page example",
+            refundType: "partial",
+            refundAmount: Number(refundAmount),
+          }
+        : {
+            reason: "Total refund from success page example",
+            refundType: "total",
+          };
+
+    const response = await fetch(
+      `/api/examples/payments/${encodeURIComponent(paymentId)}/refund`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+
+    const data = (await response.json()) as unknown;
+
+    if (!response.ok) {
+      throw new Error(
+        typeof data === "object" &&
+          data !== null &&
+          "error" in data &&
+          typeof (data as { error?: unknown }).error === "string"
+          ? (data as { error: string }).error
+          : "Refund failed",
+      );
+    }
+
+    setRefundResult(data);
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Unexpected error");
+  } finally {
+    setRefundLoading(false);
+  }
+}
+```
+
+## Environment Configuration
+
+Make sure to set the `APP_URL` environment variable:
+
+```bash .env.local
+APP_URL=http://localhost:3000
+# In production:
+# APP_URL=https://yourdomain.com
+```
+
+This ensures callback URLs are generated correctly for your environment.
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Never expose API credentials on the client">
+    All GalioPay API calls should be made from your backend (API routes). Never include your API key in client-side code.
+  </Accordion>
+
+  <Accordion title="Validate payment amounts server-side">
+    The example includes validation:
+    ```typescript
+    if (!body.orderId || !body.amount || body.amount < 100) {
+      return NextResponse.json(
+        { error: "Invalid request: orderId and amount are required. Minimum amount is 100." },
+        { status: 400 },
+      );
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Always verify payment status">
+    After receiving a success callback, fetch the payment details from GalioPay to verify the payment actually succeeded. Don't trust the URL parameter alone.
+  </Accordion>
+
+  <Accordion title="Use HTTPS in production">
+    Ensure your callback URLs use HTTPS in production to protect payment data in transit.
+  </Accordion>
+
+  <Accordion title="Encode URL parameters">
+    Always use `encodeURIComponent()` when building URLs with dynamic parameters:
+    ```typescript
+    `/api/examples/payments/${encodeURIComponent(paymentId)}`
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Testing the Flow
+
+1. Start your development server
+2. Navigate to `/checkout`
+3. Click "Create payment link"
+4. Complete the payment on GalioPay's test environment
+5. You'll be redirected to `/checkout/success?galio_payment_id=...`
+6. The payment details will be fetched and displayed automatically
+
+## Key Takeaways
+
+- Payment links are created from your backend API route
+- Success and failure URLs are configured when creating the payment link
+- The `galio_payment_id` parameter is automatically appended by GalioPay
+- Always fetch payment details to verify the payment status
+- Handle errors gracefully on all pages
+- Use Suspense boundaries when working with search parameters in Next.js
+
+## Related API Endpoints
+
+- [Create Payment Link](/api-reference/payment-links/create)
+- [Get Payment](/api-reference/payments/get)
+- [Refund Payment](/api-reference/payments/refund)

@@ -1,0 +1,505 @@
+---
+title: 'Handling Payments'
+description: 'Retrieve and manage payment information in your GalioPay integration'
+---
+
+## Overview
+
+After a customer completes a payment through a payment link, you need to retrieve payment details to verify the transaction and update your order status.
+
+## Retrieving Payment Details
+
+Use the `getPayment` function to fetch complete payment information:
+
+```typescript src/lib/galiopay/client.ts:99-101
+export async function getPayment(id: string): Promise<PaymentDetails> {
+  return requestGalioPay<PaymentDetails>(`/payments/${id}`, { method: "GET" });
+}
+```
+
+### PaymentDetails Type
+
+```typescript src/lib/galiopay/types.ts:45-55
+export type PaymentDetails = {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  date: string;
+  referenceId: string;
+  type: string;
+  moneyReleaseDate?: string;
+  netAmount?: number;
+};
+```
+
+## Payment Flow
+
+<Steps>
+  <Step title="Customer completes payment">
+    After paying through the GalioPay checkout page, the customer is redirected to your success or failure URL:
+
+    ```
+    https://yourdomain.com/checkout/success?orderId=12345
+    ```
+  </Step>
+
+  <Step title="Retrieve payment link details">
+    First, get the payment link to obtain the payment ID:
+
+    ```typescript
+    import { getPaymentLink } from "@/lib/galiopay/client";
+
+    const linkDetails = await getPaymentLink(linkId, proofToken);
+    
+    if (linkDetails.paymentId) {
+      // Payment was completed
+      const paymentId = linkDetails.paymentId;
+    }
+    ```
+
+    The `PaymentLinkDetails` type:
+
+    ```typescript src/lib/galiopay/types.ts:36-43
+    export type PaymentLinkDetails = {
+      id: string;
+      proofToken: string;
+      items: GalioPayItem[];
+      referenceId: string;
+      status: string;
+      paymentId: string | null;
+    };
+    ```
+  </Step>
+
+  <Step title="Fetch payment details">
+    Use the payment ID to get complete payment information:
+
+    ```typescript
+    import { getPayment } from "@/lib/galiopay/client";
+
+    const payment = await getPayment(paymentId);
+    console.log(payment.status); // "approved", "pending", "rejected", etc.
+    ```
+  </Step>
+
+  <Step title="Update order status">
+    Update your database based on the payment status:
+
+    ```typescript
+    if (payment.status === "approved") {
+      await db.orders.update(orderId, {
+        status: "paid",
+        paymentId: payment.id,
+        paidAmount: payment.amount,
+        paidAt: payment.date,
+      });
+    }
+    ```
+  </Step>
+</Steps>
+
+## Payment Properties
+
+<ParamField path="id" type="string">
+  Unique identifier for the payment in GalioPay's system.
+</ParamField>
+
+<ParamField path="amount" type="number">
+  Total payment amount in cents. For example, `10000` represents 100.00 ARS.
+</ParamField>
+
+<ParamField path="currency" type="string">
+  Currency code for the payment (e.g., "ARS").
+</ParamField>
+
+<ParamField path="status" type="string">
+  Current payment status. Common values include:
+  - `"approved"` - Payment successful
+  - `"pending"` - Payment being processed
+  - `"rejected"` - Payment failed
+  - `"refunded"` - Payment has been refunded
+</ParamField>
+
+<ParamField path="date" type="string">
+  ISO 8601 timestamp when the payment was created.
+</ParamField>
+
+<ParamField path="referenceId" type="string">
+  Your internal reference ID that was provided when creating the payment link.
+</ParamField>
+
+<ParamField path="type" type="string">
+  Payment type or method used.
+</ParamField>
+
+<ParamField path="moneyReleaseDate" type="string" optional>
+  Date when funds will be released to your account (if applicable).
+</ParamField>
+
+<ParamField path="netAmount" type="number" optional>
+  Net amount after fees, in cents (if available).
+</ParamField>
+
+## Complete API Route Example
+
+Here's a complete example of handling a payment callback:
+
+```typescript
+import { NextResponse } from "next/server";
+import { getPaymentLink, getPayment } from "@/lib/galiopay/client";
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const orderId = searchParams.get("orderId");
+
+    if (!orderId) {
+      return NextResponse.json(
+        { error: "Missing orderId" },
+        { status: 400 }
+      );
+    }
+
+    // Retrieve order from your database
+    const order = await db.orders.findUnique({ where: { id: orderId } });
+    
+    if (!order || !order.galiopayLinkId || !order.galiopayProof) {
+      return NextResponse.json(
+        { error: "Order not found" },
+        { status: 404 }
+      );
+    }
+
+    // Get payment link details
+    const linkDetails = await getPaymentLink(
+      order.galiopayLinkId,
+      order.galiopayProof
+    );
+
+    // Check if payment was completed
+    if (!linkDetails.paymentId) {
+      return NextResponse.json(
+        { error: "Payment not completed", status: linkDetails.status },
+        { status: 400 }
+      );
+    }
+
+    // Get full payment details
+    const payment = await getPayment(linkDetails.paymentId);
+
+    // Verify payment status
+    if (payment.status === "approved") {
+      // Update order in database
+      await db.orders.update({
+        where: { id: orderId },
+        data: {
+          status: "paid",
+          paymentId: payment.id,
+          paidAmount: payment.amount,
+          paidAt: new Date(payment.date),
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        payment: {
+          id: payment.id,
+          amount: payment.amount,
+          status: payment.status,
+        },
+      });
+    }
+
+    return NextResponse.json({
+      success: false,
+      status: payment.status,
+    });
+  } catch (error) {
+    console.error("Error processing payment:", error);
+    
+    const message =
+      error instanceof Error ? error.message : "Unexpected server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+```
+
+## Payment Status Handling
+
+Different payment statuses require different handling:
+
+<CodeGroup>
+
+```typescript Approved Payment
+if (payment.status === "approved") {
+  // Payment successful - fulfill order
+  await fulfillOrder(orderId);
+  await sendConfirmationEmail(order.customerEmail, payment);
+}
+```
+
+```typescript Pending Payment
+if (payment.status === "pending") {
+  // Payment being processed - wait for confirmation
+  await db.orders.update(orderId, {
+    status: "payment_pending",
+    paymentId: payment.id,
+  });
+}
+```
+
+```typescript Rejected Payment
+if (payment.status === "rejected") {
+  // Payment failed - notify customer
+  await db.orders.update(orderId, {
+    status: "payment_failed",
+  });
+  await sendPaymentFailedEmail(order.customerEmail);
+}
+```
+
+```typescript Refunded Payment
+if (payment.status === "refunded") {
+  // Payment was refunded
+  await db.orders.update(orderId, {
+    status: "refunded",
+    refundedAt: new Date(),
+  });
+  await processRefund(orderId);
+}
+```
+
+</CodeGroup>
+
+## Webhook Alternative (Future)
+
+<Note>
+  While the current implementation uses redirect-based payment verification, webhooks provide a more robust solution for production environments. Check GalioPay documentation for webhook support.
+</Note>
+
+If webhooks are available, you would:
+
+1. Register a webhook URL with GalioPay
+2. Receive real-time payment notifications
+3. Verify webhook signatures
+4. Process payment updates asynchronously
+
+## Security Considerations
+
+<Warning>
+  **Important Security Practices:**
+
+  - Always verify payment details server-side before fulfilling orders
+  - Never trust payment status from client-side code or URL parameters
+  - Validate that `payment.referenceId` matches your expected order ID
+  - Check that `payment.amount` matches your order total
+  - Use the GalioPay client only in server-side code (API routes, Server Actions)
+</Warning>
+
+### Payment Verification Checklist
+
+```typescript
+async function verifyPayment(orderId: string, paymentId: string) {
+  // 1. Get order from your database
+  const order = await db.orders.findUnique({ where: { id: orderId } });
+  
+  if (!order) {
+    throw new Error("Order not found");
+  }
+
+  // 2. Fetch payment from GalioPay
+  const payment = await getPayment(paymentId);
+
+  // 3. Verify reference ID matches
+  if (payment.referenceId !== orderId) {
+    throw new Error("Payment reference ID mismatch");
+  }
+
+  // 4. Verify amount matches
+  if (payment.amount !== order.totalAmount) {
+    throw new Error("Payment amount mismatch");
+  }
+
+  // 5. Check payment status
+  if (payment.status !== "approved") {
+    throw new Error(`Payment not approved: ${payment.status}`);
+  }
+
+  // 6. Check if already processed
+  if (order.paymentId === paymentId) {
+    throw new Error("Payment already processed");
+  }
+
+  return payment;
+}
+```
+
+## Displaying Payment Information
+
+<CodeGroup>
+
+```typescript Success Page (Server Component)
+import { getPayment } from "@/lib/galiopay/client";
+
+export default async function PaymentSuccessPage({
+  searchParams,
+}: {
+  searchParams: { orderId: string };
+}) {
+  const order = await db.orders.findUnique({
+    where: { id: searchParams.orderId },
+  });
+
+  if (!order?.paymentId) {
+    return <div>Payment not found</div>;
+  }
+
+  const payment = await getPayment(order.paymentId);
+
+  return (
+    <div>
+      <h1>Payment Successful!</h1>
+      <p>Order ID: {order.id}</p>
+      <p>Payment ID: {payment.id}</p>
+      <p>Amount: {payment.amount / 100} {payment.currency}</p>
+      <p>Date: {new Date(payment.date).toLocaleString()}</p>
+    </div>
+  );
+}
+```
+
+```typescript API Route Response
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const paymentId = searchParams.get("paymentId");
+
+  if (!paymentId) {
+    return NextResponse.json(
+      { error: "Missing paymentId" },
+      { status: 400 }
+    );
+  }
+
+  const payment = await getPayment(paymentId);
+
+  return NextResponse.json({
+    id: payment.id,
+    amount: payment.amount,
+    currency: payment.currency,
+    status: payment.status,
+    date: payment.date,
+    referenceId: payment.referenceId,
+  });
+}
+```
+
+</CodeGroup>
+
+## Error Handling
+
+Handle common errors when retrieving payments:
+
+```typescript
+try {
+  const payment = await getPayment(paymentId);
+  return payment;
+} catch (error) {
+  if (error instanceof Error) {
+    // Check for specific error messages
+    if (error.message.includes("Missing required GalioPay environment variables")) {
+      console.error("Configuration error:", error.message);
+      // Handle configuration error
+    } else if (error.message.includes("GalioPay request failed")) {
+      console.error("API request failed:", error.message);
+      // Handle API error
+    } else {
+      console.error("Unexpected error:", error.message);
+      // Handle other errors
+    }
+  }
+  
+  throw error;
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Store payment IDs in your database">
+    Always save the payment ID when processing a successful payment:
+    
+    ```typescript
+    await db.orders.update(orderId, {
+      paymentId: payment.id,
+      status: "paid",
+      paidAt: new Date(payment.date),
+    });
+    ```
+    
+    This allows you to retrieve payment details later without needing the payment link.
+  </Accordion>
+
+  <Accordion title="Implement idempotency">
+    Ensure payment processing is idempotent to prevent double-processing:
+    
+    ```typescript
+    const existingPayment = await db.orders.findUnique({
+      where: { paymentId: payment.id },
+    });
+    
+    if (existingPayment) {
+      console.log("Payment already processed");
+      return existingPayment;
+    }
+    
+    // Process payment...
+    ```
+  </Accordion>
+
+  <Accordion title="Log payment events">
+    Maintain an audit trail of payment state changes:
+    
+    ```typescript
+    await db.paymentEvents.create({
+      paymentId: payment.id,
+      orderId: order.id,
+      status: payment.status,
+      amount: payment.amount,
+      timestamp: new Date(),
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Handle race conditions">
+    Use database transactions when updating payment status:
+    
+    ```typescript
+    await db.$transaction(async (tx) => {
+      const order = await tx.orders.findUnique({
+        where: { id: orderId },
+      });
+      
+      if (order.status !== "pending") {
+        throw new Error("Order already processed");
+      }
+      
+      await tx.orders.update({
+        where: { id: orderId },
+        data: { status: "paid", paymentId: payment.id },
+      });
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Refunds" icon="rotate-left" href="/guides/refunds">
+    Learn how to process refunds for completed payments
+  </Card>
+  <Card title="Creating Payment Links" icon="link" href="/guides/creating-payment-links">
+    Review payment link creation
+  </Card>
+</CardGroup>

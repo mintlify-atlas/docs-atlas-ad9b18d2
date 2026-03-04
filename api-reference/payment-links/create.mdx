@@ -1,0 +1,223 @@
+---
+title: 'Create Payment Link'
+description: 'Create a new payment link for collecting payments from customers'
+---
+
+## Function Signature
+
+```typescript
+async function createPaymentLink(
+  payload: CreatePaymentLinkInput
+): Promise<CreatePaymentLinkResponse>
+```
+
+Creates a new payment link that customers can use to complete a purchase. The payment link is hosted by GalioPay and includes all item details, pricing, and redirect URLs.
+
+## Parameters
+
+<ParamField path="payload" type="CreatePaymentLinkInput" required>
+  The payment link configuration object
+
+  <ParamField path="items" type="GalioPayItem[]" required>
+    Array of items to include in the payment link. At least one item is required.
+
+    <ParamField path="title" type="string" required>
+      The item name or title
+    </ParamField>
+
+    <ParamField path="quantity" type="number" required>
+      The quantity of this item
+    </ParamField>
+
+    <ParamField path="unitPrice" type="number" required>
+      The price per unit in the specified currency
+    </ParamField>
+
+    <ParamField path="currencyId" type="string" required>
+      The currency code (e.g., "ARS" for Argentine Peso)
+    </ParamField>
+
+    <ParamField path="imageUrl" type="string">
+      Optional URL to an image representing the item
+    </ParamField>
+  </ParamField>
+
+  <ParamField path="referenceId" type="string" required>
+    Your unique identifier for this payment link. Used to correlate with your internal systems.
+  </ParamField>
+
+  <ParamField path="description" type="string">
+    Optional description providing additional context about the purchase
+  </ParamField>
+
+  <ParamField path="establishmentName" type="string">
+    Optional name of the establishment or business
+  </ParamField>
+
+  <ParamField path="sellerName" type="string">
+    Optional name of the seller
+  </ParamField>
+
+  <ParamField path="backUrl" type="object">
+    Optional redirect URLs after payment completion
+
+    <ParamField path="success" type="string">
+      URL to redirect to after successful payment
+    </ParamField>
+
+    <ParamField path="failure" type="string">
+      URL to redirect to after failed payment
+    </ParamField>
+  </ParamField>
+</ParamField>
+
+## Response
+
+<ResponseField name="url" type="string" required>
+  The payment link URL where customers can complete their purchase
+</ResponseField>
+
+## Example Usage
+
+```typescript
+import { createPaymentLink } from "@/lib/galiopay/client";
+
+// Create a payment link for a single item
+const response = await createPaymentLink({
+  referenceId: "order-12345",
+  description: "Premium subscription purchase",
+  establishmentName: "My Store",
+  sellerName: "Acme Corp",
+  items: [
+    {
+      title: "Premium Plan - Monthly",
+      quantity: 1,
+      unitPrice: 2999,
+      currencyId: "ARS",
+      imageUrl: "https://example.com/premium-plan.png"
+    }
+  ],
+  backUrl: {
+    success: "https://myapp.com/payment/success",
+    failure: "https://myapp.com/payment/failed"
+  }
+});
+
+console.log("Payment URL:", response.url);
+// Redirect user to response.url to complete payment
+```
+
+## API Route Example
+
+```typescript
+import { NextResponse } from "next/server";
+import { createPaymentLink } from "@/lib/galiopay/client";
+import type { CreatePaymentLinkInput } from "@/lib/galiopay/types";
+
+export async function POST(request: Request) {
+  try {
+    const body = (await request.json()) as CreatePaymentLinkInput;
+
+    if (!body.referenceId || !Array.isArray(body.items) || body.items.length === 0) {
+      return NextResponse.json(
+        { error: "referenceId and items are required" },
+        { status: 400 },
+      );
+    }
+
+    const data = await createPaymentLink(body);
+    return NextResponse.json(data, { status: 201 });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unexpected server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+```
+
+## Request Example
+
+```json
+{
+  "referenceId": "order-12345",
+  "description": "Premium subscription purchase",
+  "establishmentName": "My Store",
+  "sellerName": "Acme Corp",
+  "items": [
+    {
+      "title": "Premium Plan - Monthly",
+      "quantity": 1,
+      "unitPrice": 2999,
+      "currencyId": "ARS",
+      "imageUrl": "https://example.com/premium-plan.png"
+    }
+  ],
+  "backUrl": {
+    "success": "https://myapp.com/payment/success",
+    "failure": "https://myapp.com/payment/failed"
+  }
+}
+```
+
+## Response Example
+
+```json
+{
+  "url": "https://pay.galiopay.com/link/abc123xyz"
+}
+```
+
+## Error Cases
+
+### Missing Required Parameters
+
+If `referenceId` or `items` are missing or invalid:
+
+```json
+{
+  "error": "referenceId and items are required"
+}
+```
+
+### Authentication Error
+
+If API credentials are missing or invalid:
+
+```json
+{
+  "error": "Missing required GalioPay environment variables"
+}
+```
+
+### API Error
+
+If the GalioPay API returns an error:
+
+```json
+{
+  "error": "GalioPay request failed"
+}
+```
+
+## Security Notes
+
+<Warning>
+  This function requires authentication via the `GALIOPAY_API_KEY` and `GALIOPAY_CLIENT_ID` environment variables. These credentials are automatically included in the request headers:
+  - `Authorization: Bearer {API_KEY}`
+  - `x-client-id: {CLIENT_ID}`
+
+  Never expose these credentials in client-side code. Always call this function from server-side code or secure API routes.
+</Warning>
+
+## Environment Variables
+
+Required environment variables:
+
+- `GALIOPAY_API_BASE` - The base URL for the GalioPay API
+- `GALIOPAY_API_KEY` - Your API key for authentication
+- `GALIOPAY_CLIENT_ID` - Your client ID for authentication
+
+## Related Functions
+
+- [Update Payment Link](/api-reference/payment-links/update) - Modify an existing payment link
+- [Get Payment Link](/api-reference/payment-links/get) - Retrieve payment link details

@@ -1,0 +1,563 @@
+---
+title: 'Interactive API Tester'
+description: 'Test all GalioPay API endpoints with a live interactive interface'
+---
+
+## Overview
+
+The interactive API tester provides a browser-based interface to test all GalioPay API endpoints. It maps 1:1 with the documented API routes and lets you modify payloads in real-time.
+
+**Live Demo:** Navigate to `/examples` in the source application.
+
+## Features
+
+- Test all payment link and payment endpoints
+- Edit JSON payloads directly in the UI
+- Real-time response display
+- Error handling with descriptive messages
+- Pre-filled example payloads
+
+## Available Endpoints
+
+The tester includes the following GalioPay API operations:
+
+<CardGroup cols={2}>
+  <Card title="Create Payment Link" icon="link">
+    POST /payment-links
+  </Card>
+  <Card title="Update Payment Link" icon="pen-to-square">
+    PUT /payment-links/{id}
+  </Card>
+  <Card title="Get Payment Link" icon="magnifying-glass">
+    GET /payment-links/{id}?proof=
+  </Card>
+  <Card title="Get Payment" icon="receipt">
+    GET /payments/{id}
+  </Card>
+  <Card title="Refund Payment" icon="rotate-left">
+    POST /payments/{id}/refund
+  </Card>
+</CardGroup>
+
+## Implementation
+
+### Main Interface
+
+**Source:** `src/app/examples/page.tsx`
+
+```tsx
+"use client";
+
+import { FormEvent, useState } from "react";
+
+type ApiResult = {
+  title: string;
+  payload: unknown;
+};
+
+export default function ApiExamplesPage() {
+  const [paymentLinkId, setPaymentLinkId] = useState("");
+  const [proofToken, setProofToken] = useState("");
+  const [paymentId, setPaymentId] = useState("");
+
+  const [createPayload, setCreatePayload] = useState(
+    JSON.stringify(initialCreatePayload, null, 2),
+  );
+  const [updatePayload, setUpdatePayload] = useState(
+    JSON.stringify(initialUpdatePayload, null, 2),
+  );
+  const [refundPayload, setRefundPayload] = useState(
+    JSON.stringify(initialRefundPayload, null, 2),
+  );
+
+  const [loading, setLoading] = useState<string | null>(null);
+  const [result, setResult] = useState<ApiResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function runRequest(
+    title: string,
+    url: string,
+    method: "GET" | "POST" | "PUT",
+    body?: unknown,
+  ) {
+    setLoading(title);
+    setError(null);
+
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+
+      const data = (await response.json()) as unknown;
+
+      if (!response.ok) {
+        throw new Error(
+          typeof data === "object" &&
+            data !== null &&
+            "error" in data &&
+            typeof (data as { error?: unknown }).error === "string"
+            ? (data as { error: string }).error
+            : "Request failed",
+        );
+      }
+
+      setResult({ title, payload: data });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unexpected error");
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  // Endpoint handlers...
+}
+```
+
+### Default Payloads
+
+The interface comes with pre-configured example payloads:
+
+#### Create Payment Link Payload
+
+```json
+{
+  "items": [
+    {
+      "title": "Consulting service",
+      "quantity": 1,
+      "unitPrice": 100,
+      "currencyId": "ARS"
+    }
+  ],
+  "referenceId": "order-123"
+}
+```
+
+#### Update Payment Link Payload
+
+```json
+{
+  "referenceId": "order-123-updated"
+}
+```
+
+#### Refund Payload
+
+```json
+{
+  "reason": "Customer requested a refund",
+  "refundType": "total"
+}
+```
+
+## Endpoint Details
+
+### 1. Create Payment Link
+
+**Method:** `POST /api/examples/payment-links`
+
+```tsx
+async function onCreatePaymentLink(event: FormEvent) {
+  event.preventDefault();
+  const body = JSON.parse(createPayload) as unknown;
+  await runRequest(
+    "Create payment link",
+    "/api/examples/payment-links",
+    "POST",
+    body,
+  );
+}
+```
+
+**UI Component:**
+
+```tsx
+<form
+  onSubmit={onCreatePaymentLink}
+  className="rounded-2xl border border-line bg-card p-5"
+>
+  <h2 className="text-lg font-semibold text-foreground">
+    POST /payment-links
+  </h2>
+  <textarea
+    value={createPayload}
+    onChange={(event) => setCreatePayload(event.target.value)}
+    className="mt-3 h-48 w-full rounded-xl border border-line bg-slate-50 p-3 font-mono text-xs text-foreground"
+  />
+  <button
+    className="mt-3 rounded-xl bg-brand px-4 py-2 text-sm text-white"
+    type="submit"
+  >
+    {loading === "Create payment link" ? "Running..." : "Run create"}
+  </button>
+</form>
+```
+
+**Example Response:**
+
+```json
+{
+  "id": "pl_abc123",
+  "url": "https://pay.galiopay.com/pl_abc123",
+  "referenceId": "order-123",
+  "proof": "proof_token_xyz",
+  "expiresAt": "2026-03-05T12:00:00Z"
+}
+```
+
+### 2. Update Payment Link
+
+**Method:** `PUT /api/examples/payment-links/{id}`
+
+```tsx
+async function onUpdatePaymentLink(event: FormEvent) {
+  event.preventDefault();
+
+  if (!paymentLinkId) {
+    setError("Payment Link ID is required");
+    return;
+  }
+
+  const body = JSON.parse(updatePayload) as unknown;
+  await runRequest(
+    "Update payment link",
+    `/api/examples/payment-links/${paymentLinkId}`,
+    "PUT",
+    body,
+  );
+}
+```
+
+**UI Component:**
+
+```tsx
+<form
+  onSubmit={onUpdatePaymentLink}
+  className="rounded-2xl border border-line bg-card p-5"
+>
+  <h2 className="text-lg font-semibold text-foreground">
+    PUT /payment-links/{"id"}
+  </h2>
+  <input
+    value={paymentLinkId}
+    onChange={(event) => setPaymentLinkId(event.target.value)}
+    placeholder="payment-link-id"
+    className="mt-3 w-full rounded-xl border border-line bg-slate-50 p-3 text-sm"
+  />
+  <textarea
+    value={updatePayload}
+    onChange={(event) => setUpdatePayload(event.target.value)}
+    className="mt-3 h-36 w-full rounded-xl border border-line bg-slate-50 p-3 font-mono text-xs text-foreground"
+  />
+  <button
+    className="mt-3 rounded-xl bg-brand px-4 py-2 text-sm text-white"
+    type="submit"
+  >
+    {loading === "Update payment link" ? "Running..." : "Run update"}
+  </button>
+</form>
+```
+
+### 3. Get Payment Link
+
+**Method:** `GET /api/examples/payment-links/{id}?proof=`
+
+```tsx
+async function onGetPaymentLink(event: FormEvent) {
+  event.preventDefault();
+
+  if (!paymentLinkId || !proofToken) {
+    setError("Payment Link ID and proof token are required");
+    return;
+  }
+
+  await runRequest(
+    "Get payment link",
+    `/api/examples/payment-links/${paymentLinkId}?proof=${encodeURIComponent(proofToken)}`,
+    "GET",
+  );
+}
+```
+
+**UI Component:**
+
+```tsx
+<form
+  onSubmit={onGetPaymentLink}
+  className="rounded-2xl border border-line bg-card p-5"
+>
+  <h2 className="text-lg font-semibold text-foreground">
+    GET /payment-links/{"id"}?proof=
+  </h2>
+  <input
+    value={paymentLinkId}
+    onChange={(event) => setPaymentLinkId(event.target.value)}
+    placeholder="payment-link-id"
+    className="mt-3 w-full rounded-xl border border-line bg-slate-50 p-3 text-sm"
+  />
+  <input
+    value={proofToken}
+    onChange={(event) => setProofToken(event.target.value)}
+    placeholder="proof-token"
+    className="mt-3 w-full rounded-xl border border-line bg-slate-50 p-3 text-sm"
+  />
+  <button
+    className="mt-3 rounded-xl bg-brand px-4 py-2 text-sm text-white"
+    type="submit"
+  >
+    {loading === "Get payment link"
+      ? "Running..."
+      : "Run get payment link"}
+  </button>
+</form>
+```
+
+<Info>
+  The proof token is required to retrieve payment link details. You receive this token when creating a payment link.
+</Info>
+
+### 4. Get Payment
+
+**Method:** `GET /api/examples/payments/{id}`
+
+```tsx
+async function onGetPayment(event: FormEvent) {
+  event.preventDefault();
+
+  if (!paymentId) {
+    setError("Payment ID is required");
+    return;
+  }
+
+  await runRequest(
+    "Get payment",
+    `/api/examples/payments/${paymentId}`,
+    "GET",
+  );
+}
+```
+
+**UI Component:**
+
+```tsx
+<form
+  onSubmit={onGetPayment}
+  className="rounded-2xl border border-line bg-card p-5"
+>
+  <h2 className="text-lg font-semibold text-foreground">
+    GET /payments/{"id"}
+  </h2>
+  <input
+    value={paymentId}
+    onChange={(event) => setPaymentId(event.target.value)}
+    placeholder="payment-id"
+    className="mt-3 w-full rounded-xl border border-line bg-slate-50 p-3 text-sm"
+  />
+  <button
+    className="mt-3 rounded-xl bg-brand px-4 py-2 text-sm text-white"
+    type="submit"
+  >
+    {loading === "Get payment" ? "Running..." : "Run get payment"}
+  </button>
+</form>
+```
+
+**Example Response:**
+
+```json
+{
+  "id": "pay_xyz789",
+  "amount": 100,
+  "currency": "ARS",
+  "status": "approved",
+  "date": "2026-03-04T10:30:00Z",
+  "referenceId": "order-123",
+  "type": "credit_card",
+  "moneyReleaseDate": "2026-03-05T10:30:00Z",
+  "netAmount": 95
+}
+```
+
+### 5. Refund Payment
+
+**Method:** `POST /api/examples/payments/{id}/refund`
+
+```tsx
+async function onRefundPayment(event: FormEvent) {
+  event.preventDefault();
+
+  if (!paymentId) {
+    setError("Payment ID is required");
+    return;
+  }
+
+  const body = JSON.parse(refundPayload) as unknown;
+  await runRequest(
+    "Refund payment",
+    `/api/examples/payments/${paymentId}/refund`,
+    "POST",
+    body,
+  );
+}
+```
+
+**UI Component:**
+
+```tsx
+<form
+  onSubmit={onRefundPayment}
+  className="rounded-2xl border border-line bg-card p-5 lg:col-span-2"
+>
+  <h2 className="text-lg font-semibold text-foreground">
+    POST /payments/{"id"}/refund
+  </h2>
+  <input
+    value={paymentId}
+    onChange={(event) => setPaymentId(event.target.value)}
+    placeholder="payment-id"
+    className="mt-3 w-full rounded-xl border border-line bg-slate-50 p-3 text-sm"
+  />
+  <textarea
+    value={refundPayload}
+    onChange={(event) => setRefundPayload(event.target.value)}
+    className="mt-3 h-32 w-full rounded-xl border border-line bg-slate-50 p-3 font-mono text-xs text-foreground"
+  />
+  <button
+    className="mt-3 rounded-xl bg-brand px-4 py-2 text-sm text-white"
+    type="submit"
+  >
+    {loading === "Refund payment" ? "Running..." : "Run refund"}
+  </button>
+</form>
+```
+
+**Refund Types:**
+
+<Tabs>
+  <Tab title="Total Refund">
+    ```json
+    {
+      "reason": "Customer requested a refund",
+      "refundType": "total"
+    }
+    ```
+  </Tab>
+  <Tab title="Partial Refund">
+    ```json
+    {
+      "reason": "Partial refund for damaged item",
+      "refundType": "partial",
+      "refundAmount": 50
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Response Display
+
+All API responses are displayed in a unified response section:
+
+```tsx
+<section className="mt-6 rounded-2xl border border-line bg-card p-5">
+  <h2 className="text-lg font-semibold text-foreground">Response</h2>
+  {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
+  {result ? (
+    <div className="mt-3">
+      <p className="text-sm text-muted">{result.title}</p>
+      <pre className="mt-2 overflow-x-auto rounded-xl bg-slate-900 p-4 font-mono text-xs text-slate-100">
+        {JSON.stringify(result.payload, null, 2)}
+      </pre>
+    </div>
+  ) : (
+    <p className="mt-3 text-sm text-muted">
+      Run any example to see the response JSON.
+    </p>
+  )}
+</section>
+```
+
+## Error Handling
+
+The interface includes comprehensive error handling:
+
+```tsx
+try {
+  const response = await fetch(url, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const data = (await response.json()) as unknown;
+
+  if (!response.ok) {
+    throw new Error(
+      typeof data === "object" &&
+        data !== null &&
+        "error" in data &&
+        typeof (data as { error?: unknown }).error === "string"
+        ? (data as { error: string }).error
+        : "Request failed",
+    );
+  }
+
+  setResult({ title, payload: data });
+} catch (err) {
+  setError(err instanceof Error ? err.message : "Unexpected error");
+} finally {
+  setLoading(null);
+}
+```
+
+**Error scenarios handled:**
+
+- Network failures
+- API errors with descriptive messages
+- Invalid JSON in request payload
+- Missing required fields (payment ID, proof token, etc.)
+
+## Usage Flow
+
+<Steps>
+  <Step title="Create a payment link">
+    Use the "POST /payment-links" form with the default payload or customize it
+  </Step>
+  <Step title="Copy the payment link ID and proof token">
+    From the response JSON, copy the `id` and `proof` fields
+  </Step>
+  <Step title="Test other endpoints">
+    Use the copied values to test update, get, and other operations
+  </Step>
+  <Step title="Complete a payment">
+    Visit the payment link URL to complete a test payment
+  </Step>
+  <Step title="Get payment details">
+    After payment, use the payment ID to fetch details and test refunds
+  </Step>
+</Steps>
+
+## Best Practices
+
+<Check>**Validate JSON before submitting** - The interface parses JSON payloads, so ensure they're valid</Check>
+<Check>**Use URL encoding** - Payment IDs and proof tokens are automatically encoded</Check>
+<Check>**Test error scenarios** - Try invalid IDs or malformed payloads to see error handling</Check>
+<Check>**Save proof tokens** - You need them to retrieve payment link details later</Check>
+
+## Customization
+
+You can extend this interface to add:
+
+- Saved payload templates
+- Request history
+- Export responses to file
+- Webhook testing
+- Batch operations
+
+## Related Documentation
+
+- [Checkout Flow](/examples/checkout-flow)
+- [Payment Links API](/api-reference/payment-links/create)
+- [Payments API](/api-reference/payments/get)
+- [Refunds API](/api-reference/payments/refund)
